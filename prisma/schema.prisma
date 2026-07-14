@@ -1,0 +1,115 @@
+// DramaScore — data model
+// SQLite to start (simple), designed to migrate to Postgres later.
+// Note: SQLite has no native enums, so enum-like fields are stored as strings
+// and validated in application code (see src/lib/enums.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  handle           String?  @unique // chosen on first login; no real names anywhere
+  image            String?
+  reviewCount      Int      @default(0)
+  isFoundingMember Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  logs    Log[]
+  reviews Review[]
+}
+
+model Series {
+  id            String   @id @default(cuid())
+  canonicalTitle String
+  synopsis      String
+  episodeCount  Int
+  posterUrl     String? // nullable; we render gradient placeholders when absent
+  status        String   @default("ongoing") // ongoing | complete
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  aliases   TitleAlias[]
+  logs      Log[]
+  reviews   Review[]
+  tropeTags SeriesTrope[]
+
+  @@index([canonicalTitle])
+}
+
+model TitleAlias {
+  id         String  @id @default(cuid())
+  seriesId   String
+  aliasTitle String
+  platform   String // ReelShort | DramaBox | ShortMax | GoodShort | ShortTV | Other
+  url        String?
+
+  series Series @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@index([seriesId])
+  @@index([aliasTitle])
+}
+
+model Trope {
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+
+  series SeriesTrope[]
+}
+
+// Explicit many-to-many join so the relation is easy to reassign on merge.
+model SeriesTrope {
+  seriesId String
+  tropeId  String
+
+  series Series @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  trope  Trope  @relation(fields: [tropeId], references: [id], onDelete: Cascade)
+
+  @@id([seriesId, tropeId])
+  @@index([tropeId])
+}
+
+model Log {
+  id                String   @id @default(cuid())
+  userId            String
+  seriesId          String
+  status            String // watching | finished | abandoned
+  abandonedAtEp     Int?
+  platformWatchedOn String // ReelShort | DramaBox | ShortMax | GoodShort | ShortTV | Other
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  series Series @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, seriesId]) // one log per user per series
+  @@index([seriesId])
+  @@index([createdAt])
+}
+
+model Review {
+  id             String   @id @default(cuid())
+  userId         String
+  seriesId       String
+  stars          Int // 1..5
+  worthCoins     Boolean
+  endingVerdict  String // satisfying | rushed | rage | na
+  fallsApartAtEp Int?
+  oneLiner       String? // max 280 chars, optional
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  series Series @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, seriesId]) // one review per user per series, editable
+  @@index([seriesId])
+}

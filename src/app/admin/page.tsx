@@ -1,0 +1,68 @@
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { isAdmin, adminEnabled } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
+import { AdminClient } from "@/components/AdminClient";
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminPage() {
+  if (!adminEnabled()) {
+    return (
+      <main className="min-h-dvh px-6 pt-20 text-center">
+        <h1 className="text-xl font-black">Admin is disabled</h1>
+        <p className="mt-2 text-sm text-ink-soft">
+          Set <code className="text-coin">ADMIN_EMAILS</code> in your environment to enable it.
+        </p>
+        <Link href="/" className="btn-ghost mt-6 inline-flex">
+          Back home
+        </Link>
+      </main>
+    );
+  }
+  if (!(await isAdmin())) redirect("/signin?next=/admin");
+
+  const [series, tropes] = await Promise.all([
+    prisma.series.findMany({
+      orderBy: { canonicalTitle: "asc" },
+      select: {
+        id: true,
+        canonicalTitle: true,
+        episodeCount: true,
+        status: true,
+        synopsis: true,
+        tropeTags: { select: { tropeId: true } },
+        _count: { select: { logs: true, reviews: true, aliases: true } },
+      },
+    }),
+    prisma.trope.findMany({ orderBy: { name: "asc" } }),
+  ]);
+
+  return (
+    <main className="pb-10 pt-6">
+      <div className="flex items-center justify-between px-4">
+        <h1 className="text-2xl font-black">Admin</h1>
+        <Link href="/" className="text-sm text-ink-faint">
+          ‹ back
+        </Link>
+      </div>
+      <p className="px-4 pb-4 text-sm text-ink-soft">
+        {series.length} series · {tropes.length} tropes
+      </p>
+      <AdminClient
+        series={series.map((s) => ({
+          id: s.id,
+          canonicalTitle: s.canonicalTitle,
+          episodeCount: s.episodeCount,
+          status: s.status,
+          synopsis: s.synopsis,
+          tropeIds: s.tropeTags.map((t) => t.tropeId),
+          logs: s._count.logs,
+          reviews: s._count.reviews,
+          aliases: s._count.aliases,
+        }))}
+        tropes={tropes.map((t) => ({ id: t.id, name: t.name, slug: t.slug }))}
+      />
+    </main>
+  );
+}
