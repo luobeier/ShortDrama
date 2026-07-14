@@ -153,7 +153,11 @@ export async function GET() {
         </span>
       </div>
     ),
-    { width: 1080, height: 1920 }
+    {
+      width: 1080,
+      height: 1920,
+      headers: { "Cache-Control": "no-store" },
+    }
   );
 }
 

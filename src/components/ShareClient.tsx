@@ -5,11 +5,12 @@ import { useState } from "react";
 export function ShareClient({ handle }: { handle: string }) {
   const [busy, setBusy] = useState<null | "download" | "share">(null);
   const [note, setNote] = useState<string | null>(null);
-  // Cache-bust so edits to the diary reflect on regenerate.
-  const src = `/api/share?ts=${Math.floor(Date.now() / 1000)}`;
+  // Stable URL keeps SSR and client HTML identical; the API route sends
+  // Cache-Control: no-store, so regenerates always reflect the latest diary.
+  const src = "/api/share";
 
   async function getBlob(): Promise<Blob> {
-    const res = await fetch(src);
+    const res = await fetch(src, { cache: "no-store" });
     if (!res.ok) throw new Error("Couldn't build the image.");
     return res.blob();
   }
