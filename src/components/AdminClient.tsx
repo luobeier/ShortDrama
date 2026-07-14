@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PLATFORMS, SERIES_STATUSES } from "@/lib/enums";
+import { Poster } from "./Poster";
 
 interface AdminSeries {
   id: string;
@@ -10,6 +11,7 @@ interface AdminSeries {
   episodeCount: number;
   status: string;
   synopsis: string;
+  posterUrl: string | null;
   tropeIds: string[];
   logs: number;
   reviews: number;
@@ -126,6 +128,7 @@ function SeriesTab({
   const [synopsis, setSynopsis] = useState("");
   const [eps, setEps] = useState("60");
   const [status, setStatus] = useState<string>("ongoing");
+  const [posterUrl, setPosterUrl] = useState("");
   const [tropeIds, setTropeIds] = useState<string[]>([]);
 
   const [aliasTitle, setAliasTitle] = useState("");
@@ -138,6 +141,7 @@ function SeriesTab({
       setSynopsis("");
       setEps("60");
       setStatus("ongoing");
+      setPosterUrl("");
       setTropeIds([]);
       return;
     }
@@ -146,6 +150,7 @@ function SeriesTab({
     setSynopsis(s.synopsis);
     setEps(String(s.episodeCount));
     setStatus(s.status);
+    setPosterUrl(s.posterUrl ?? "");
     setTropeIds(s.tropeIds);
   }
 
@@ -162,6 +167,7 @@ function SeriesTab({
       synopsis,
       episodeCount: Number(eps),
       status,
+      posterUrl,
       tropeIds,
     };
     const ok = await call(payload);
@@ -197,6 +203,30 @@ function SeriesTab({
               </option>
             ))}
           </select>
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-semibold text-ink-soft">
+            Poster URL <span className="font-normal text-ink-faint">(optional — leave blank for the auto gradient card)</span>
+          </p>
+          <div className="flex gap-3">
+            <input
+              className="input flex-1"
+              placeholder="https://…"
+              value={posterUrl}
+              onChange={(e) => setPosterUrl(e.target.value)}
+            />
+            <Poster
+              title={title || "?"}
+              posterUrl={posterUrl || null}
+              showTitle={false}
+              className="h-[52px] w-[38px] shrink-0 rounded-lg border border-line"
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-ink-faint">
+            Only use art you have rights to use — an official image URL you found
+            while browsing the platform, or your own upload host. Broken/blocked
+            links fall back to the gradient card automatically.
+          </p>
         </div>
         <div>
           <p className="mb-1 text-xs font-semibold text-ink-soft">Tropes</p>

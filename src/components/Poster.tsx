@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { posterGradient, posterInitials } from "@/lib/gradient";
 
 interface Props {
@@ -8,21 +11,24 @@ interface Props {
 }
 
 /**
- * Gradient placeholder poster. We deliberately don't hotlink real posters —
- * every series gets a deterministic colored card with its initials + title.
+ * Poster art. Real posterUrl images (e.g. pasted from a platform's own CDN)
+ * are tried first; the gradient placeholder is always rendered underneath so
+ * a 404 / hotlink block / CORS failure just reveals the fallback instead of
+ * leaving a blank box.
  */
 export function Poster({ title, posterUrl, className = "", showTitle = true }: Props) {
   const g = posterGradient(title);
+  const [broken, setBroken] = useState(false);
+  // Give a new URL a fresh chance to load (e.g. the admin preview while typing).
+  useEffect(() => setBroken(false), [posterUrl]);
+  const showReal = !!posterUrl && !broken;
+
   return (
     <div
       className={`relative flex flex-col items-center justify-center overflow-hidden text-white ${className}`}
-      style={
-        posterUrl
-          ? { backgroundImage: `url(${posterUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-          : { background: g.css }
-      }
+      style={{ background: g.css }}
     >
-      {!posterUrl && (
+      {!showReal && (
         <>
           <div
             className="pointer-events-none absolute inset-0 opacity-30"
@@ -40,6 +46,15 @@ export function Poster({ title, posterUrl, className = "", showTitle = true }: P
             </span>
           )}
         </>
+      )}
+      {posterUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={posterUrl}
+          alt=""
+          className={`absolute inset-0 h-full w-full object-cover ${broken ? "hidden" : ""}`}
+          onError={() => setBroken(true)}
+        />
       )}
     </div>
   );

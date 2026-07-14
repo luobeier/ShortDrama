@@ -34,6 +34,10 @@ export async function POST(req: Request) {
         return badRequest("Episode count must be a positive number.");
       if (!isSeriesStatus(status)) return badRequest("Invalid status.");
       const tropeIds: string[] = Array.isArray(body.tropeIds) ? body.tropeIds : [];
+      const posterUrl =
+        typeof body.posterUrl === "string" && body.posterUrl.trim()
+          ? body.posterUrl.trim()
+          : null;
 
       const series = await prisma.series.create({
         data: {
@@ -41,6 +45,7 @@ export async function POST(req: Request) {
           synopsis,
           episodeCount,
           status,
+          posterUrl,
           tropeTags: { create: tropeIds.map((tropeId) => ({ tropeId })) },
         },
       });
@@ -59,6 +64,9 @@ export async function POST(req: Request) {
       const ep = asInt(body.episodeCount);
       if (ep && ep > 0) data.episodeCount = ep;
       if (isSeriesStatus(body.status)) data.status = body.status;
+      // Empty string clears the poster back to the auto-generated gradient card.
+      if (typeof body.posterUrl === "string")
+        data.posterUrl = body.posterUrl.trim() || null;
 
       await prisma.series.update({ where: { id }, data });
 
