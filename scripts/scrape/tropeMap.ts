@@ -61,6 +61,10 @@ const GENRE_TO_SLUG: Record<string, string> = {
   "identity reveal": "hidden-identity",
   "crime lord": "mafia",
   reincarnation: "rebirth",
+  // DramaBox taxonomy (labels/typeTwoNames observed 2026-07-16)
+  "concealed identity": "hidden-identity",
+  "second-chance love": "second-chance",
+  "winning her back": "divorce-regret",
 };
 
 export function mapGenres(labels: string[]): { slugs: string[]; unmapped: string[] } {

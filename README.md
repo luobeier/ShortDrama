@@ -26,6 +26,22 @@ npm run dev                   # http://localhost:3000
 
 To wipe and reseed: `npm run db:reset`.
 
+### Growing the catalog (scrape → import → posters)
+
+```bash
+npm run scrape -- reelshort --limit 50   # also: dramabox, shortmax, goodshort
+npm run import -- data/scraped/reelshort.json                      # dry-run preview
+npm run import -- data/scraped/reelshort.json --preserve synopsis --commit
+npm run posters                          # localize covers as 360×540 WebP thumbnails
+```
+
+The scraper (manual runs only — honest bot UA, fail-closed robots.txt check,
+≥2s between pages, metadata only) writes importer-ready rows to
+`data/scraped/<platform>.json`. `npm run import` is the CLI twin of the admin
+Import tab: dry-run by default, `--preserve synopsis` keeps curated text on
+series that already exist, `--fields x,y` restores specific columns from a
+file. `npm run posters` is idempotent and never hotlinks.
+
 ### Signing in (no external services required)
 
 Out of the box, `ENABLE_DEV_LOGIN=true` turns on a **passwordless email login**:
@@ -95,9 +111,12 @@ people abandon, we show the **median abandonment episode**.
    public payload (Coin Score, review list) is wrapped in `unstable_cache` with
    a per-series **cache tag**, and `revalidateTag` fires whenever a log/review
    on that series changes. Best of both.
-3. **Posters.** No real posters are hotlinked. `posterUrl` stays null and every
-   series renders a **deterministic gradient card** (hash of the title →
-   consistent colors + initials). Swap in real art later via `posterUrl`.
+3. **Posters.** Never hotlinked. `npm run posters` downloads each platform
+   cover **once**, shrinks it to a 360×540 WebP thumbnail in
+   `public/posters/`, and points `posterUrl` at the local file (identification-
+   sized art; Watch buttons link back to the platform). Series without a
+   poster source render a **deterministic gradient card** (hash of the title
+   → consistent colors + initials).
 4. **Episodes watched / estimated spend.** Finished = full episode count;
    abandoned = the bail episode; **in-progress ("watching") contributes 0** to
    the watched total (we don't track per-episode progress) — noted in the UI.

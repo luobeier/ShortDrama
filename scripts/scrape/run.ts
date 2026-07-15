@@ -20,10 +20,16 @@ import { mapGenres } from "./tropeMap";
 import { normalizeTitle } from "../../src/lib/importSchema";
 import type { PlatformAdapter, RunSummary, ScrapedRow } from "./types";
 import { reelshort } from "./adapters/reelshort";
+import { dramabox } from "./adapters/dramabox";
+import { shortmax } from "./adapters/shortmax";
+import { goodshort } from "./adapters/goodshort";
 
 const ADAPTERS: Record<string, PlatformAdapter> = {
   reelshort,
-  // dramabox / shortmax / goodshort / shorttv: add an adapter file and list it here.
+  dramabox,
+  // shorttv.live serves both the ShortMax and legacy ShortTV catalogs.
+  shortmax,
+  goodshort,
 };
 
 async function main() {
