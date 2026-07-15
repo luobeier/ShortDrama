@@ -4,8 +4,10 @@ import { BottomNav } from "@/components/BottomNav";
 import { Providers } from "@/components/Providers";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { getCurrentUser } from "@/lib/session";
+import { SITE_URL } from "@/lib/siteUrl";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "DramaScore — is it worth your coins?",
   description:
     "Community reviews and tracking for short vertical dramas. Log what you binge, warn people where it falls apart, and see the Coin Score before you spend.",

@@ -13,6 +13,7 @@
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "icons": "tsx scripts/generate-icons.ts",
     "scrape": "tsx scripts/scrape/run.ts",
+    "import": "tsx scripts/import-catalog.ts",
     "posters": "tsx scripts/fetch-posters.ts"
   },
   "prisma": {
