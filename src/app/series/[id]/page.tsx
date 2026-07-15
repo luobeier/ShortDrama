@@ -14,7 +14,10 @@ import { LogReviewFlow } from "@/components/LogReviewFlow";
 import { ReviewCard } from "@/components/ReviewCard";
 import { ReviewList } from "@/components/ReviewList";
 import { BailHistogram } from "@/components/BailHistogram";
+import { RatingBars } from "@/components/RatingBars";
+import { AddToListButton } from "@/components/AddToListButton";
 import { SeriesCard } from "@/components/SeriesCard";
+import { prisma } from "@/lib/prisma";
 import { scoreBand, MIN_ABANDONS_FOR_STAT } from "@/lib/score";
 import {
   ENDING_VERDICTS,
@@ -46,13 +49,38 @@ export default async function SeriesPage({
   if (!series) notFound();
 
   const user = await getCurrentUser();
-  const [userState, similar] = await Promise.all([
+  const [userState, similar, myLists, myVotes] = await Promise.all([
     user ? getUserSeriesState(user.id, series.id) : { log: null, review: null },
     getSimilarSeries(series.id, series.tropes.map((t) => t.slug)),
+    user
+      ? prisma.list.findMany({
+          where: { userId: user.id },
+          orderBy: { updatedAt: "desc" },
+          include: { items: { where: { seriesId: series.id }, select: { id: true } } },
+        })
+      : Promise.resolve([]),
+    user
+      ? prisma.reviewVote.findMany({
+          where: { voterId: user.id, review: { seriesId: series.id } },
+          select: { reviewId: true },
+        })
+      : Promise.resolve([]),
   ]);
+  const listOptions = myLists.map((l) => ({
+    id: l.id,
+    title: l.title,
+    has: l.items.length > 0,
+  }));
+  const votedIds = myVotes.map((v) => v.reviewId);
 
   const locked = !user?.hasUnlocked;
   const band = series.score.score !== null ? scoreBand(series.score.score) : null;
+
+  // Finishers vs bailers — the critics-vs-audience split.
+  const avgOf = (rs: { stars: number }[]) =>
+    rs.length ? rs.reduce((s, r) => s + r.stars, 0) / rs.length : null;
+  const finisherAvg = avgOf(series.reviews.filter((r) => r.watchStatus === "finished"));
+  const bailerAvg = avgOf(series.reviews.filter((r) => r.watchStatus === "abandoned"));
 
   // One outbound watch link per platform (first alias with a URL wins).
   const watchLinks = new Map<string, string>();
@@ -68,7 +96,7 @@ export default async function SeriesPage({
   const withOneLiners = series.reviews.filter((r) => r.oneLiner);
 
   return (
-    <main className="pb-8">
+    <main className="pb-24 lg:pb-8">
       {/* Hero */}
       <div className="relative">
         <Poster
@@ -168,6 +196,29 @@ export default async function SeriesPage({
           ))}
         </div>
 
+        {/* Cast */}
+        {series.cast.length > 0 && (
+          <div className="mt-3">
+            <p className="mb-1.5 text-xs font-semibold text-ink-faint">Starring</p>
+            <div className="flex flex-wrap gap-2">
+              {series.cast.map((a) => (
+                <Link key={a.slug} href={`/actor/${a.slug}`} className="chip text-xs">
+                  🎬 {a.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Save to list */}
+        <div className="mt-4">
+          <AddToListButton
+            seriesId={series.id}
+            lists={listOptions}
+            isLoggedIn={!!user}
+          />
+        </div>
+
         {/* Log / review CTA */}
         <div className="mt-5">
           <LogReviewFlow
@@ -215,6 +266,30 @@ export default async function SeriesPage({
                 </div>
               </div>
               <ScoreBreakdown score={series.score} />
+              <div className="mt-4 border-t border-line pt-3">
+                <p className="mb-2 text-xs font-semibold text-ink-soft">Rating spread</p>
+                <RatingBars stars={series.reviews.map((r) => r.stars)} />
+              </div>
+              {(finisherAvg !== null || bailerAvg !== null) && (
+                <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                  {finisherAvg !== null && (
+                    <span className="text-good">
+                      ✅ Finishers avg {finisherAvg.toFixed(1)}★
+                    </span>
+                  )}
+                  {bailerAvg !== null && (
+                    <span className="text-warn">
+                      🏳️ Bailers avg {bailerAvg.toFixed(1)}★
+                    </span>
+                  )}
+                </p>
+              )}
+              {series.realCost && (
+                <p className="mt-3 rounded-xl bg-coin/10 px-3 py-2 text-xs text-coin">
+                  💸 Real cost: <b>${series.realCost.avg.toFixed(2)}</b> average, reported
+                  by {series.realCost.count} viewer{series.realCost.count === 1 ? "" : "s"}
+                </p>
+              )}
             </div>
           </LockedSection>
         )}
@@ -312,6 +387,7 @@ export default async function SeriesPage({
             <ReviewList
               reviews={locked ? series.reviews.slice(0, 4) : series.reviews}
               locked={locked}
+              votedIds={votedIds}
             />
           </LockedSection>
         )}
@@ -325,6 +401,20 @@ export default async function SeriesPage({
       )}
       </div>{/* end right column */}
       </div>{/* end two-col grid */}
+
+      {/* Sticky log/review CTA (mobile) — #log opens the existing flow sheet */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-14 z-30 bg-gradient-to-t from-bg via-bg/80 to-transparent px-4 pb-2 pt-6 lg:hidden">
+        <a
+          href="#log"
+          className={`${userState.review ? "btn-ghost" : "btn-coin"} pointer-events-auto w-full shadow-lg`}
+        >
+          {userState.review
+            ? "✏️ Edit your review"
+            : userState.log
+              ? "★ Review it — unlock everything"
+              : "🪙 Log this drama"}
+        </a>
+      </div>
 
       {/* More like this */}
       {similar.length > 0 && (

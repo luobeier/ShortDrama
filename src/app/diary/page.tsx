@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { getDiary } from "@/lib/diary";
+import { prisma } from "@/lib/prisma";
 import { DiaryClient } from "@/components/DiaryClient";
 import { EmptyState } from "@/components/EmptyState";
 
@@ -12,7 +13,14 @@ export default async function DiaryPage() {
   if (!user) redirect("/signin?next=/diary");
   if (!user.handle) redirect("/onboarding");
 
-  const { entries, stats } = await getDiary(user.id);
+  const [{ entries, stats }, lists] = await Promise.all([
+    getDiary(user.id),
+    prisma.list.findMany({
+      where: { userId: user.id },
+      orderBy: { updatedAt: "desc" },
+      include: { _count: { select: { items: true } } },
+    }),
+  ]);
 
   return (
     <main className="pb-8 pt-5">
@@ -27,6 +35,21 @@ export default async function DiaryPage() {
           </Link>
         )}
       </div>
+
+      {lists.length > 0 && (
+        <div className="mt-4 px-4">
+          <p className="mb-2 text-xs font-black uppercase tracking-wide text-ink-faint">
+            📃 My lists
+          </p>
+          <div className="no-scrollbar flex gap-2 overflow-x-auto">
+            {lists.map((l) => (
+              <Link key={l.id} href={`/list/${l.id}`} className="chip">
+                {l.title} <span className="text-ink-faint">{l._count.items}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {entries.length === 0 ? (
         <div className="mt-8">

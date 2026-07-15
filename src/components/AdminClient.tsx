@@ -38,16 +38,27 @@ interface AdminReport {
   seriesTitle: string;
 }
 
+interface AdminTitleRequest {
+  id: string;
+  title: string;
+  platform: string | null;
+  note: string | null;
+  requesterHandle: string | null;
+  createdAt: string;
+}
+
 type Tab = "series" | "merge" | "tropes" | "import" | "mods";
 
 export function AdminClient({
   series,
   tropes,
   reports,
+  titleRequests,
 }: {
   series: AdminSeries[];
   tropes: AdminTrope[];
   reports: AdminReport[];
+  titleRequests: AdminTitleRequest[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("series");
@@ -99,7 +110,14 @@ export function AdminClient({
       {tab === "merge" && <MergeTab series={series} call={call} busy={busy} />}
       {tab === "tropes" && <TropesTab tropes={tropes} call={call} busy={busy} />}
       {tab === "import" && <ImportTab />}
-      {tab === "mods" && <ModsTab reports={reports} call={call} busy={busy} />}
+      {tab === "mods" && (
+        <ModsTab
+          reports={reports}
+          titleRequests={titleRequests}
+          call={call}
+          busy={busy}
+        />
+      )}
     </div>
   );
 }
@@ -596,6 +614,55 @@ function ImportTab() {
 }
 
 function ModsTab({
+  reports,
+  titleRequests,
+  call,
+  busy,
+}: {
+  reports: AdminReport[];
+  titleRequests: AdminTitleRequest[];
+  call: (p: Record<string, unknown>) => Promise<boolean>;
+  busy: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Title requests from the search dead-end */}
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-bold">
+          📥 Title requests <span className="text-ink-faint">{titleRequests.length}</span>
+        </p>
+        {titleRequests.length === 0 ? (
+          <p className="text-xs text-ink-faint">None open — the catalog is keeping up.</p>
+        ) : (
+          titleRequests.map((t) => (
+            <div key={t.id} className="card flex items-center gap-3 p-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold">{t.title}</p>
+                <p className="text-xs text-ink-faint">
+                  {t.platform ? `${t.platform} · ` : ""}requested by @
+                  {t.requesterHandle ?? "anon"}
+                  {t.note ? ` — “${t.note}”` : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => call({ action: "dismissTitleRequest", requestId: t.id })}
+                disabled={busy}
+                className="btn-ghost shrink-0 px-3 py-1.5 text-xs"
+                title="Dismiss (add the series first via the Series or Import tab)"
+              >
+                Done
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      <ReportsQueue reports={reports} call={call} busy={busy} />
+    </div>
+  );
+}
+
+function ReportsQueue({
   reports,
   call,
   busy,

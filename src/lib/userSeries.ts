@@ -6,7 +6,12 @@ export async function getUserSeriesState(userId: string, seriesId: string) {
   const [log, review] = await Promise.all([
     prisma.log.findUnique({
       where: { userId_seriesId: { userId, seriesId } },
-      select: { status: true, platformWatchedOn: true, abandonedAtEp: true },
+      select: {
+        status: true,
+        platformWatchedOn: true,
+        abandonedAtEp: true,
+        currentEp: true,
+      },
     }),
     prisma.review.findUnique({
       where: { userId_seriesId: { userId, seriesId } },
@@ -16,6 +21,7 @@ export async function getUserSeriesState(userId: string, seriesId: string) {
         endingVerdict: true,
         fallsApartAtEp: true,
         oneLiner: true,
+        coinsSpent: true,
       },
     }),
   ]);
@@ -25,6 +31,7 @@ export async function getUserSeriesState(userId: string, seriesId: string) {
           status: log.status as LogStatus,
           platformWatchedOn: log.platformWatchedOn,
           abandonedAtEp: log.abandonedAtEp,
+          currentEp: log.currentEp,
         }
       : null,
     review: review
@@ -34,6 +41,7 @@ export async function getUserSeriesState(userId: string, seriesId: string) {
           endingVerdict: review.endingVerdict as EndingVerdict,
           fallsApartAtEp: review.fallsApartAtEp,
           oneLiner: review.oneLiner,
+          coinsSpent: review.coinsSpent,
         }
       : null,
   };

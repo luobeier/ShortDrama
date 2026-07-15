@@ -27,12 +27,15 @@ export interface ImportSeriesRow {
   aliases?: ImportAlias[];
   /** Slugs or display names; matched via slugify(). Unknown → created. */
   tropes?: string[];
+  /** Cast names; matched via slugify(). Unknown → created. Append-only. */
+  actors?: string[];
 }
 // Unknown keys on a row (e.g. the scraper's `_unmappedGenres`) are ignored.
 
 export const IMPORT_MAX_ROWS = 500;
 export const IMPORT_MAX_ALIASES_PER_ROW = 20;
 export const IMPORT_MAX_TROPES_PER_ROW = 15;
+export const IMPORT_MAX_ACTORS_PER_ROW = 12;
 
 /** Canonical form used for all title matching: trim, collapse spaces, lowercase. */
 export function normalizeTitle(s: string): string {
@@ -123,6 +126,20 @@ export function parseImportRow(raw: unknown): { row?: ImportSeriesRow; errors: s
         else tropes.push(t.trim());
       });
       row.tropes = tropes;
+    }
+  }
+
+  if (r.actors !== undefined) {
+    if (!Array.isArray(r.actors)) errors.push("actors must be an array of strings");
+    else if (r.actors.length > IMPORT_MAX_ACTORS_PER_ROW)
+      errors.push(`too many actors (max ${IMPORT_MAX_ACTORS_PER_ROW})`);
+    else {
+      const actors: string[] = [];
+      r.actors.forEach((a, i) => {
+        if (typeof a !== "string" || !a.trim()) errors.push(`actors[${i}] must be a non-empty string`);
+        else actors.push(cleanTitle(a));
+      });
+      row.actors = actors;
     }
   }
 

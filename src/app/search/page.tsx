@@ -2,7 +2,9 @@ import Link from "next/link";
 import { SearchBar } from "@/components/SearchBar";
 import { SeriesCard } from "@/components/SeriesCard";
 import { TropeRail } from "@/components/TropeRail";
+import { RequestTitleForm } from "@/components/RequestTitleForm";
 import { searchSeries, getAllTropesWithCounts } from "@/lib/queries";
+import { getCurrentUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +15,10 @@ export default async function SearchPage({
 }) {
   const { q } = await searchParams;
   const query = q?.trim() ?? "";
-  const [results, tropes] = await Promise.all([
+  const [results, tropes, user] = await Promise.all([
     query ? searchSeries(query) : Promise.resolve([]),
     getAllTropesWithCounts(),
+    getCurrentUser(),
   ]);
 
   return (
@@ -35,11 +38,9 @@ export default async function SearchPage({
             {results.length} result{results.length === 1 ? "" : "s"} for “{query}”
           </p>
           {results.length === 0 ? (
-            <div className="px-4 pt-6 text-sm text-ink-soft">
+            <div className="flex flex-col gap-4 px-4 pt-5 text-sm text-ink-soft">
               <p>Nothing yet. Try an alias, or a different platform&apos;s title.</p>
-              <p className="mt-2 text-ink-faint">
-                Can&apos;t find a drama? Admins can add it — for now, browse by trope below.
-              </p>
+              <RequestTitleForm prefillTitle={query} isLoggedIn={!!user} />
             </div>
           ) : (
             <div className="mt-3 grid grid-cols-2 gap-3 px-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">

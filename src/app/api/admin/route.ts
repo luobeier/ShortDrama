@@ -218,6 +218,12 @@ export async function POST(req: Request) {
       return Response.json({ ok: true });
     }
 
+    case "dismissTitleRequest": {
+      const requestId = String(body.requestId ?? "");
+      await prisma.titleRequest.delete({ where: { id: requestId } }).catch(() => null);
+      return Response.json({ ok: true });
+    }
+
     case "deleteReview": {
       const reviewId = String(body.reviewId ?? "");
       const review = await prisma.review.findUnique({

@@ -28,6 +28,7 @@ function StatTile({
 }
 
 const STATUS_LABEL: Record<string, string> = {
+  planned: "📌 Planned",
   watching: "👀 Watching",
   finished: "✅ Finished",
   abandoned: "🏳️ Abandoned",
@@ -92,14 +93,14 @@ export function DiaryClient({
     return true;
   });
 
-  async function markFinished(e: DiaryEntry) {
+  async function bumpStatus(e: DiaryEntry, status: "watching" | "finished") {
     setBumping(e.seriesId);
     await fetch("/api/log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         seriesId: e.seriesId,
-        status: "finished",
+        status,
         platformWatchedOn: e.platform,
       }),
     }).catch(() => null);
@@ -215,9 +216,12 @@ export function DiaryClient({
                 <div className="min-w-0 flex-1">
                   <h3 className="truncate text-sm font-bold">{e.title}</h3>
                   <p className="text-xs text-ink-faint">
-                    {STATUS_LABEL[e.status]}
+                    {STATUS_LABEL[e.status] ?? e.status}
                     {e.status === "abandoned" && e.abandonedAtEp
                       ? ` at ep ${e.abandonedAtEp}`
+                      : ""}
+                    {e.status === "watching" && e.currentEp
+                      ? ` · on ep ${e.currentEp}/${e.episodeCount}`
                       : ""}{" "}
                     · {e.platform}
                   </p>
@@ -230,12 +234,22 @@ export function DiaryClient({
               </Link>
               {e.status === "watching" && (
                 <button
-                  onClick={() => markFinished(e)}
+                  onClick={() => bumpStatus(e, "finished")}
                   disabled={bumping === e.seriesId}
                   className="btn-ghost shrink-0 px-2.5 py-1.5 text-xs"
                   title="Mark as finished"
                 >
                   {bumping === e.seriesId ? "…" : "✓ Finished"}
+                </button>
+              )}
+              {e.status === "planned" && (
+                <button
+                  onClick={() => bumpStatus(e, "watching")}
+                  disabled={bumping === e.seriesId}
+                  className="btn-ghost shrink-0 px-2.5 py-1.5 text-xs"
+                  title="Start watching"
+                >
+                  {bumping === e.seriesId ? "…" : "▶ Start"}
                 </button>
               )}
               <Link href={`/series/${e.seriesId}`} className="shrink-0 text-ink-faint">

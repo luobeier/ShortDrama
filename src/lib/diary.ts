@@ -10,6 +10,7 @@ export interface DiaryEntry {
   platform: string;
   episodeCount: number;
   abandonedAtEp: number | null;
+  currentEp: number | null;
   tropes: { name: string; slug: string }[];
   myStars: number | null;
   myWorthCoins: boolean | null;
@@ -54,6 +55,7 @@ export async function getDiary(
       status: l.status,
       episodeCount: l.series.episodeCount,
       abandonedAtEp: l.abandonedAtEp,
+      currentEp: l.currentEp,
     });
     const review = reviewBySeries.get(l.seriesId);
     return {
@@ -63,6 +65,7 @@ export async function getDiary(
       platform: l.platformWatchedOn,
       episodeCount: l.series.episodeCount,
       abandonedAtEp: l.abandonedAtEp,
+      currentEp: l.currentEp,
       tropes: l.series.tropeTags.map((t) => ({
         name: t.trope.name,
         slug: t.trope.slug,

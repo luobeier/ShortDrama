@@ -24,25 +24,30 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  logs    Log[]
-  reviews Review[]
-  reports Report[]
+  logs          Log[]
+  reviews       Review[]
+  reports       Report[]
+  reviewVotes   ReviewVote[]
+  titleRequests TitleRequest[]
+  lists         List[]
 }
 
 model Series {
-  id            String   @id @default(cuid())
+  id             String   @id @default(cuid())
   canonicalTitle String
-  synopsis      String
-  episodeCount  Int
-  posterUrl     String? // nullable; we render gradient placeholders when absent
-  status        String   @default("ongoing") // ongoing | complete
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  synopsis       String
+  episodeCount   Int
+  posterUrl      String? // nullable; we render gradient placeholders when absent
+  status         String   @default("ongoing") // ongoing | complete
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   aliases   TitleAlias[]
   logs      Log[]
   reviews   Review[]
   tropeTags SeriesTrope[]
+  cast      SeriesActor[]
+  listItems ListItem[]
 
   @@index([canonicalTitle])
 }
@@ -84,8 +89,9 @@ model Log {
   id                String   @id @default(cuid())
   userId            String
   seriesId          String
-  status            String // watching | finished | abandoned
+  status            String // planned | watching | finished | abandoned
   abandonedAtEp     Int?
+  currentEp         Int? // light progress for watching-status logs
   platformWatchedOn String // ReelShort | DramaBox | ShortMax | GoodShort | ShortTV | Other
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -107,12 +113,14 @@ model Review {
   endingVerdict  String // satisfying | rushed | rage | na
   fallsApartAtEp Int?
   oneLiner       String? // max 280 chars, optional
+  coinsSpent     Float? // optional self-reported real $ spent on this series
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  series  Series   @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  series  Series       @relation(fields: [seriesId], references: [id], onDelete: Cascade)
   reports Report[]
+  votes   ReviewVote[]
 
   @@unique([userId, seriesId]) // one review per user per series, editable
   @@index([seriesId])
@@ -131,4 +139,78 @@ model Report {
 
   @@unique([reviewId, reporterId]) // one report per user per review
   @@index([reviewId])
+}
+
+// A "this review was helpful" vote. One per user per review.
+model ReviewVote {
+  id        String   @id @default(cuid())
+  reviewId  String
+  voterId   String
+  createdAt DateTime @default(now())
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  voter  User   @relation(fields: [voterId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, voterId])
+  @@index([reviewId])
+}
+
+// "Add this series" request from the search dead-end; reviewed in /admin.
+model TitleRequest {
+  id          String   @id @default(cuid())
+  title       String
+  platform    String? // where the requester watched it, if known
+  note        String?
+  requesterId String
+  createdAt   DateTime @default(now())
+
+  requester User @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+}
+
+// Cast — vertical-drama fans follow leads across series.
+model Actor {
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+
+  series SeriesActor[]
+}
+
+model SeriesActor {
+  seriesId String
+  actorId  String
+
+  series Series @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  actor  Actor  @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@id([seriesId, actorId])
+  @@index([actorId])
+}
+
+// User-curated lists ("werewolf dramas that stick the landing").
+model List {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items ListItem[]
+
+  @@index([userId])
+}
+
+model ListItem {
+  id        String   @id @default(cuid())
+  listId    String
+  seriesId  String
+  createdAt DateTime @default(now())
+
+  list   List   @relation(fields: [listId], references: [id], onDelete: Cascade)
+  series Series @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, seriesId])
+  @@index([seriesId])
 }

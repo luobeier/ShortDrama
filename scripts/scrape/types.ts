@@ -17,6 +17,8 @@ export interface RawSeries {
   /** From "End"/"Completed"/"Ongoing" style labels; null if not shown. */
   statusHint: "complete" | "ongoing" | null;
   genreLabels: string[];
+  /** Lead cast names, when the platform exposes them. */
+  castNames: string[];
 }
 
 export interface PlatformAdapter {

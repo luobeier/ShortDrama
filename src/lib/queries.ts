@@ -251,6 +251,50 @@ export async function getSimilarSeries(
     .map((x) => x.card);
 }
 
+/** The signed-in user's planned + watching series, for the home rail. */
+export async function getWatchRail(
+  userId: string,
+  limit = 12
+): Promise<(SeriesCardData & { myStatus: string })[]> {
+  const logs = await prisma.log.findMany({
+    where: { userId, status: { in: ["planned", "watching"] } },
+    orderBy: { updatedAt: "desc" },
+    take: limit,
+    include: { series: { include: cardInclude } },
+  });
+  return logs.map((l) => ({ ...toCard(l.series), myStatus: l.status }));
+}
+
+/** Platform leaderboard: everything watchable on one app, best first. */
+export async function getSeriesByPlatform(platform: string): Promise<SeriesCardData[]> {
+  const series = await prisma.series.findMany({
+    where: { aliases: { some: { platform } } },
+    include: cardInclude,
+  });
+  return series
+    .map(toCard)
+    .sort((a, b) => (b.score.score ?? -1) - (a.score.score ?? -1));
+}
+
+/** An actor + every series they appear in, best first. */
+export async function getActorWithSeries(slug: string): Promise<{
+  actor: { name: string; slug: string } | null;
+  series: SeriesCardData[];
+}> {
+  const actor = await prisma.actor.findUnique({ where: { slug } });
+  if (!actor) return { actor: null, series: [] };
+  const series = await prisma.series.findMany({
+    where: { cast: { some: { actorId: actor.id } } },
+    include: cardInclude,
+  });
+  return {
+    actor: { name: actor.name, slug: actor.slug },
+    series: series
+      .map(toCard)
+      .sort((a, b) => (b.score.score ?? -1) - (a.score.score ?? -1)),
+  };
+}
+
 /** Lightweight counts for the home hero's social-proof strip. */
 export async function getSiteStats(): Promise<{
   series: number;

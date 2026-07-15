@@ -11,7 +11,7 @@ export const PLATFORMS = [
 ] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
-export const LOG_STATUSES = ["watching", "finished", "abandoned"] as const;
+export const LOG_STATUSES = ["planned", "watching", "finished", "abandoned"] as const;
 export type LogStatus = (typeof LOG_STATUSES)[number];
 
 export const SERIES_STATUSES = ["ongoing", "complete"] as const;

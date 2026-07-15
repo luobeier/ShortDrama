@@ -59,6 +59,15 @@ export async function POST(req: Request) {
 
   const fallsApartAtEp = clampEp(asInt(body.fallsApartAtEp), series.episodeCount);
 
+  // Optional self-reported real spend — the crowd-sourced "actual cost" data.
+  let coinsSpent: number | null = null;
+  if (body.coinsSpent !== undefined && body.coinsSpent !== null && body.coinsSpent !== "") {
+    const n = Number(body.coinsSpent);
+    if (!Number.isFinite(n) || n < 0 || n > 1000)
+      return badRequest("Spend must be between $0 and $1000.");
+    coinsSpent = Math.round(n * 100) / 100;
+  }
+
   const existing = await prisma.review.findUnique({
     where: { userId_seriesId: { userId, seriesId } },
     select: { id: true },
@@ -87,8 +96,9 @@ export async function POST(req: Request) {
       endingVerdict,
       fallsApartAtEp,
       oneLiner,
+      coinsSpent,
     },
-    update: { stars, worthCoins, endingVerdict, fallsApartAtEp, oneLiner },
+    update: { stars, worthCoins, endingVerdict, fallsApartAtEp, oneLiner, coinsSpent },
   });
 
   // Keep denormalized review_count in sync (only grows on first review).

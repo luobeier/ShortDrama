@@ -9,8 +9,10 @@ import {
   getCertifiedBinge,
   getAllTropesWithCounts,
   getSiteStats,
+  getWatchRail,
 } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/session";
+import { PLATFORMS } from "@/lib/enums";
 
 // Home reflects live logs/reviews; keep it fresh but cache briefly.
 export const revalidate = 60;
@@ -68,6 +70,7 @@ export default async function HomePage() {
     getSiteStats(),
     getCurrentUser(),
   ]);
+  const watchRail = user ? await getWatchRail(user.id) : [];
   const topTropes = [...tropes].sort((a, b) => b.count - a.count);
 
   return (
@@ -163,6 +166,28 @@ export default async function HomePage() {
         )
       )}
 
+      {/* Your shelf: planned + watching, most recent first */}
+      {watchRail.length > 0 && (
+        <section className="mt-9">
+          <SectionHeader
+            emoji="📌"
+            title="Your shelf"
+            subtitle="Planned and in-progress — pick up where you left off"
+            href="/diary"
+            linkLabel="My diary"
+          />
+          <div className="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-pl-4 px-4 pb-1 lg:grid lg:grid-cols-6 lg:gap-4 lg:overflow-visible">
+            {watchRail.map((s) => (
+              <SeriesCard
+                key={s.id}
+                series={s}
+                className="w-[42vw] max-w-[170px] shrink-0 snap-start sm:w-[160px] lg:w-auto lg:max-w-none"
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Trending: snap rail on mobile, grid on desktop */}
       <section className="mt-9">
         <SectionHeader
@@ -231,6 +256,22 @@ export default async function HomePage() {
             ))}
           </ol>
         )}
+      </section>
+
+      {/* Browse by platform — the "best on ReelShort" leaderboards */}
+      <section className="mt-9">
+        <SectionHeader
+          emoji="📱"
+          title="Best by app"
+          subtitle="Leaderboards for each platform"
+        />
+        <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-1">
+          {PLATFORMS.filter((p) => p !== "Other").map((p) => (
+            <Link key={p} href={`/platform/${p.toLowerCase()}`} className="chip">
+              {p}
+            </Link>
+          ))}
+        </div>
       </section>
 
       {/* Browse by trope: 2-row rail on mobile, wrapped cloud on desktop */}

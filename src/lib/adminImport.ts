@@ -52,6 +52,7 @@ interface PlannedCreate {
   posterUrl: string | null;
   aliases: { aliasTitle: string; platform: string; url: string | null }[];
   tropeSlugs: string[];
+  actorSlugs: string[];
 }
 
 interface PlannedUpdate {
@@ -61,6 +62,7 @@ interface PlannedUpdate {
   newAliases: { aliasTitle: string; platform: string; url: string | null }[];
   urlBackfills: { aliasId: string; url: string }[];
   newTropeLinkSlugs: string[];
+  newActorLinkSlugs: string[];
 }
 
 type PlannedOp = PlannedCreate | PlannedUpdate;
@@ -108,12 +110,22 @@ export async function runImport(
     tropeIdsBySeries.get(l.seriesId)!.add(l.tropeId);
   }
 
+  const allActors = await prisma.actor.findMany({ select: { id: true, slug: true } });
+  const actorIdBySlug = new Map(allActors.map((a) => [a.slug, a.id]));
+  const castLinks = await prisma.seriesActor.findMany({ select: { seriesId: true, actorId: true } });
+  const actorIdsBySeries = new Map<string, Set<string>>();
+  for (const l of castLinks) {
+    if (!actorIdsBySeries.has(l.seriesId)) actorIdsBySeries.set(l.seriesId, new Set());
+    actorIdsBySeries.get(l.seriesId)!.add(l.actorId);
+  }
+
   // ---- Plan every row (read-only) -------------------------------------------
   const results: ImportRowResult[] = [];
   const ops = new Map<number, PlannedOp>();
   const claimedTitles = new Map<string, number>(); // normalized title -> first row index
   const claimedSeries = new Map<string, number>(); // existing seriesId -> first row index
   const newTropeNameBySlug = new Map<string, string>(); // to create in commit (first-seen name wins)
+  const newActorNameBySlug = new Map<string, string>();
 
   rowsRaw.forEach((raw, index) => {
     const { row, errors } = parseImportRow(raw);
@@ -206,6 +218,19 @@ export async function runImport(
       if (!tropeIdBySlug.has(slug)) rowNewTropes.push(slug);
     }
 
+    // Actors: resolve to existing ids or queue creations by slug.
+    const actorSlugs: string[] = [];
+    const seenActorSlugs = new Set<string>();
+    for (const name of row.actors ?? []) {
+      const slug = slugify(name);
+      if (!slug || seenActorSlugs.has(slug)) continue;
+      seenActorSlugs.add(slug);
+      actorSlugs.push(slug);
+      if (!actorIdBySlug.has(slug) && !newActorNameBySlug.has(slug)) {
+        newActorNameBySlug.set(slug, name);
+      }
+    }
+
     // Aliases: dedupe within the row by (title, platform).
     const rowAliasByKey = new Map<string, { aliasTitle: string; platform: string; url: string | null }>();
     for (const a of row.aliases ?? []) {
@@ -241,6 +266,7 @@ export async function runImport(
         posterUrl: row.posterUrl ?? null,
         aliases,
         tropeSlugs,
+        actorSlugs,
       });
       results.push({
         index,
@@ -275,6 +301,11 @@ export async function runImport(
         const id = tropeIdBySlug.get(slug);
         return !id || !linked.has(id);
       });
+      const linkedActors = actorIdsBySeries.get(seriesId) ?? new Set<string>();
+      const newActorLinkSlugs = actorSlugs.filter((slug) => {
+        const id = actorIdBySlug.get(slug);
+        return !id || !linkedActors.has(id);
+      });
 
       ops.set(index, {
         kind: "update",
@@ -283,6 +314,7 @@ export async function runImport(
         newAliases,
         urlBackfills,
         newTropeLinkSlugs,
+        newActorLinkSlugs,
       });
       results.push({
         index,
@@ -322,6 +354,15 @@ export async function runImport(
       if (t) tropeIdBySlug.set(slug, t.id);
     }
   }
+  for (const [slug, name] of newActorNameBySlug) {
+    try {
+      const a = await prisma.actor.create({ data: { slug, name } });
+      actorIdBySlug.set(slug, a.id);
+    } catch {
+      const a = await prisma.actor.findUnique({ where: { slug } });
+      if (a) actorIdBySlug.set(slug, a.id);
+    }
+  }
 
   const touchedSeriesIds: string[] = [];
   let applied = 0;
@@ -345,6 +386,11 @@ export async function runImport(
                 .filter((slug) => tropeIdBySlug.has(slug))
                 .map((slug) => ({ tropeId: tropeIdBySlug.get(slug)! })),
             },
+            cast: {
+              create: op.actorSlugs
+                .filter((slug) => actorIdBySlug.has(slug))
+                .map((slug) => ({ actorId: actorIdBySlug.get(slug)! })),
+            },
           },
         });
         result.seriesId = created.id;
@@ -359,6 +405,11 @@ export async function runImport(
                 create: op.newTropeLinkSlugs
                   .filter((slug) => tropeIdBySlug.has(slug))
                   .map((slug) => ({ tropeId: tropeIdBySlug.get(slug)! })),
+              },
+              cast: {
+                create: op.newActorLinkSlugs
+                  .filter((slug) => actorIdBySlug.has(slug))
+                  .map((slug) => ({ actorId: actorIdBySlug.get(slug)! })),
               },
             },
           });

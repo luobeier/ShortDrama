@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Stars } from "./Stars";
 import { ReviewActions } from "./ReviewActions";
+import { HelpfulButton } from "./HelpfulButton";
 import {
   ENDING_VERDICT_EMOJI,
   ENDING_VERDICT_LABELS,
@@ -21,9 +22,12 @@ function timeAgo(iso: string): string {
 export function ReviewCard({
   review,
   isMine = false,
+  voted = false,
 }: {
   review: ReviewView;
   isMine?: boolean;
+  /** Whether the current user has marked this review helpful. */
+  voted?: boolean;
 }) {
   const verdict = isEndingVerdict(review.endingVerdict)
     ? review.endingVerdict
@@ -79,6 +83,21 @@ export function ReviewCard({
 
       {review.oneLiner && (
         <p className="mt-2 text-sm text-ink">“{review.oneLiner}”</p>
+      )}
+      {review.coinsSpent != null && (
+        <p className="mt-1.5 text-[11px] text-coin/90">
+          💸 actually spent ${review.coinsSpent.toFixed(2)}
+        </p>
+      )}
+      {review.helpfulCount !== undefined && (
+        <div className="mt-2">
+          <HelpfulButton
+            reviewId={review.id}
+            initialCount={review.helpfulCount}
+            initiallyVoted={voted}
+            disabled={isMine}
+          />
+        </div>
       )}
       {review.quarantined && (
         <p className="mt-1.5 text-[11px] text-ink-faint">

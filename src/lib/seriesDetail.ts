@@ -16,6 +16,10 @@ export interface ReviewView {
   /** The reviewer's log outcome on this series (finished/abandoned/watching). */
   watchStatus?: string | null;
   bailedAtEp?: number | null;
+  /** "Helpful" vote count. */
+  helpfulCount?: number;
+  /** Self-reported real $ spent, when the reviewer shared it. */
+  coinsSpent?: number | null;
 }
 
 export interface SeriesDetail {
@@ -33,6 +37,9 @@ export interface SeriesDetail {
   logCount: number;
   /** Eligible abandons' bail episodes — feeds the bail histogram. */
   abandonEps: number[];
+  /** Crowd-sourced actual spend (the Glassdoor-salary analog). */
+  realCost: { avg: number; count: number } | null;
+  cast: { name: string; slug: string }[];
 }
 
 export function seriesCacheTag(id: string): string {
@@ -45,6 +52,7 @@ async function loadSeriesDetail(id: string): Promise<SeriesDetail | null> {
     include: {
       aliases: true,
       tropeTags: { include: { trope: true } },
+      cast: { include: { actor: true } },
       logs: {
         select: {
           userId: true,
@@ -64,6 +72,7 @@ async function loadSeriesDetail(id: string): Promise<SeriesDetail | null> {
               bannedAt: true,
             },
           },
+          _count: { select: { votes: true } },
         },
       },
     },
@@ -107,8 +116,25 @@ async function loadSeriesDetail(id: string): Promise<SeriesDetail | null> {
       quarantined: now - r.user.createdAt.getTime() < QUARANTINE_MS,
       watchStatus: log?.status ?? null,
       bailedAtEp: log?.status === "abandoned" ? (log.abandonedAtEp ?? null) : null,
+      helpfulCount: r._count.votes,
+      coinsSpent: r.coinsSpent,
     };
   });
+
+  // Crowd-sourced actual spend, from aged + unbanned reviewers only.
+  const spends = visibleReviews
+    .filter(
+      (r) =>
+        r.coinsSpent != null && now - r.user.createdAt.getTime() >= QUARANTINE_MS
+    )
+    .map((r) => r.coinsSpent as number);
+  const realCost =
+    spends.length > 0
+      ? {
+          avg: Math.round((spends.reduce((s, v) => s + v, 0) / spends.length) * 100) / 100,
+          count: spends.length,
+        }
+      : null;
 
   // Bail distribution from eligible (aged, unbanned) abandons only, matching
   // the median stat's eligibility rules.
@@ -139,6 +165,8 @@ async function loadSeriesDetail(id: string): Promise<SeriesDetail | null> {
     totalReviewCount: visibleReviews.length,
     logCount: logs.length,
     abandonEps,
+    realCost,
+    cast: s.cast.map((c) => ({ name: c.actor.name, slug: c.actor.slug })),
   };
 }
 

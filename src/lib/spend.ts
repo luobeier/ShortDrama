@@ -7,16 +7,18 @@ export const FREE_EP_RUNWAY = 10; // first ~10 eps usually free-ish
 
 /**
  * Episodes a user has watched of a given series.
- * finished  -> whole thing; abandoned -> where they bailed; watching -> unknown
- * progress, so it's excluded from the watched total (noted in the UI).
+ * finished -> whole thing; abandoned -> where they bailed; watching -> their
+ * reported current episode (0 if none); planned -> nothing yet.
  */
 export function episodesWatchedFor(entry: {
   status: string;
   episodeCount: number;
   abandonedAtEp: number | null;
+  currentEp?: number | null;
 }): number {
   if (entry.status === "finished") return entry.episodeCount;
   if (entry.status === "abandoned") return entry.abandonedAtEp ?? 0;
+  if (entry.status === "watching") return entry.currentEp ?? 0;
   return 0;
 }
 

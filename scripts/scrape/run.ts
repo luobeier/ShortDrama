@@ -99,6 +99,7 @@ async function main() {
           status: raw.statusHint ?? "ongoing",
           aliases: [{ aliasTitle: raw.title, platform: adapter.platform, url: raw.url }],
           tropes: slugs,
+          ...(raw.castNames.length ? { actors: raw.castNames.slice(0, 12) } : {}),
           ...(unmapped.length ? { _unmappedGenres: unmapped } : {}),
         });
         summary.ok++;

@@ -33,6 +33,10 @@ export async function POST(req: Request) {
     status === "abandoned"
       ? clampEp(asInt(body.abandonedAtEp), series.episodeCount)
       : null;
+  const currentEp =
+    status === "watching"
+      ? clampEp(asInt(body.currentEp), series.episodeCount)
+      : null;
 
   const log = await prisma.log.upsert({
     where: { userId_seriesId: { userId, seriesId } },
@@ -41,9 +45,10 @@ export async function POST(req: Request) {
       seriesId,
       status,
       abandonedAtEp,
+      currentEp,
       platformWatchedOn,
     },
-    update: { status, abandonedAtEp, platformWatchedOn },
+    update: { status, abandonedAtEp, currentEp, platformWatchedOn },
   });
 
   revalidateTag(seriesCacheTag(seriesId));

@@ -22,7 +22,7 @@ export default async function AdminPage() {
   }
   if (!(await isAdmin())) redirect("/signin?next=/admin");
 
-  const [series, tropes, reports] = await Promise.all([
+  const [series, tropes, reports, titleRequests] = await Promise.all([
     prisma.series.findMany({
       orderBy: { canonicalTitle: "asc" },
       select: {
@@ -49,6 +49,11 @@ export default async function AdminPage() {
           },
         },
       },
+    }),
+    prisma.titleRequest.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: { requester: { select: { handle: true } } },
     }),
   ]);
 
@@ -90,6 +95,14 @@ export default async function AdminPage() {
           authorBanned: r.review.user.bannedAt !== null,
           seriesId: r.review.series.id,
           seriesTitle: r.review.series.canonicalTitle,
+        }))}
+        titleRequests={titleRequests.map((t) => ({
+          id: t.id,
+          title: t.title,
+          platform: t.platform,
+          note: t.note,
+          requesterHandle: t.requester.handle,
+          createdAt: t.createdAt.toISOString(),
         }))}
       />
     </main>

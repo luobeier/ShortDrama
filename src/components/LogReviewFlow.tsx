@@ -17,6 +17,7 @@ export interface ExistingLog {
   status: LogStatus;
   platformWatchedOn: string;
   abandonedAtEp: number | null;
+  currentEp?: number | null;
 }
 export interface ExistingReview {
   stars: number;
@@ -24,6 +25,7 @@ export interface ExistingReview {
   endingVerdict: EndingVerdict;
   fallsApartAtEp: number | null;
   oneLiner: string | null;
+  coinsSpent?: number | null;
 }
 
 interface Props {
@@ -37,6 +39,7 @@ interface Props {
 }
 
 const STATUS_META: Record<LogStatus, { emoji: string; label: string }> = {
+  planned: { emoji: "📌", label: "Planned" },
   watching: { emoji: "👀", label: "Watching" },
   finished: { emoji: "✅", label: "Finished" },
   abandoned: { emoji: "🏳️", label: "Abandoned" },
@@ -57,6 +60,9 @@ export function LogReviewFlow(props: Props) {
   const [abandonedAtEp, setAbandonedAtEp] = useState<number>(
     props.existingLog?.abandonedAtEp ?? Math.min(10, episodeCount)
   );
+  const [currentEp, setCurrentEp] = useState<string>(
+    props.existingLog?.currentEp != null ? String(props.existingLog.currentEp) : ""
+  );
 
   // Review fields
   const [stars, setStars] = useState<number>(props.existingReview?.stars ?? 0);
@@ -73,6 +79,9 @@ export function LogReviewFlow(props: Props) {
   );
   const [oneLiner, setOneLiner] = useState<string>(
     props.existingReview?.oneLiner ?? ""
+  );
+  const [coinsSpent, setCoinsSpent] = useState<string>(
+    props.existingReview?.coinsSpent != null ? String(props.existingReview.coinsSpent) : ""
   );
 
   const [busy, setBusy] = useState(false);
@@ -114,6 +123,7 @@ export function LogReviewFlow(props: Props) {
         status,
         platformWatchedOn: platform,
         abandonedAtEp: status === "abandoned" ? abandonedAtEp : null,
+        currentEp: status === "watching" && currentEp !== "" ? Number(currentEp) : null,
       }),
     });
     const data = await res.json();
@@ -144,6 +154,7 @@ export function LogReviewFlow(props: Props) {
         endingVerdict,
         fallsApartAtEp: fallsApartAtEp === "" ? null : Number(fallsApartAtEp),
         oneLiner: oneLiner.trim() || null,
+        coinsSpent: coinsSpent === "" ? null : Number(coinsSpent),
       }),
     });
     const data = await res.json();
@@ -208,7 +219,7 @@ export function LogReviewFlow(props: Props) {
 
                 <div>
                   <p className="mb-2 text-sm font-semibold">Where are you at?</p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {LOG_STATUSES.map((s) => (
                       <button
                         key={s}
@@ -225,6 +236,24 @@ export function LogReviewFlow(props: Props) {
                     ))}
                   </div>
                 </div>
+
+                {status === "watching" && (
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold">
+                      On episode <span className="text-ink-faint">(optional — counts toward your stats)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={episodeCount}
+                      inputMode="numeric"
+                      value={currentEp}
+                      onChange={(e) => setCurrentEp(e.target.value)}
+                      placeholder={`1–${episodeCount}`}
+                      className="input"
+                    />
+                  </div>
+                )}
 
                 {status === "abandoned" && (
                   <div>
@@ -357,6 +386,24 @@ export function LogReviewFlow(props: Props) {
                     value={fallsApartAtEp}
                     onChange={(e) => setFallsApartAtEp(e.target.value)}
                     placeholder="e.g. 34"
+                    className="input"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-semibold">
+                    What did it actually cost you?{" "}
+                    <span className="text-ink-faint">(optional, $)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1000}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={coinsSpent}
+                    onChange={(e) => setCoinsSpent(e.target.value)}
+                    placeholder="e.g. 12.50 — coins, passes, subscription share"
                     className="input"
                   />
                 </div>

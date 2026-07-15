@@ -102,14 +102,20 @@ export const reelshort: PlatformAdapter = {
     }
     if (!book?.book_title) return null;
 
-    // Genre labels: legacy `tag` strings + `tag_list` texts, minus cast names.
+    // Genre labels: legacy `tag` strings + `tag_list` texts. Category 1001 is
+    // the cast — split out for actor pages instead of discarding.
     const labels = new Set<string>();
-    if (Array.isArray(book.tag)) {
-      for (const t of book.tag) if (typeof t === "string") labels.add(t);
-    }
+    const castNames = new Set<string>();
     if (Array.isArray(book.tag_list)) {
       for (const t of book.tag_list) {
-        if (t?.text && t.category_id !== "1001") labels.add(t.text);
+        if (!t?.text) continue;
+        if (t.category_id === "1001") castNames.add(t.text);
+        else labels.add(t.text);
+      }
+    }
+    if (Array.isArray(book.tag)) {
+      for (const t of book.tag) {
+        if (typeof t === "string" && !castNames.has(t)) labels.add(t);
       }
     }
 
@@ -129,6 +135,7 @@ export const reelshort: PlatformAdapter = {
       // reliable completion flag, so we don't guess.
       statusHint: null,
       genreLabels: [...labels],
+      castNames: [...castNames],
     };
   },
 };
