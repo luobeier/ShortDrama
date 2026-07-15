@@ -28,6 +28,7 @@ export interface SeriesDetail {
   synopsis: string;
   episodeCount: number;
   status: string;
+  posterUrl: string | null;
   aliases: { aliasTitle: string; platform: string; url: string | null }[];
   tropes: { name: string; slug: string }[];
   platforms: string[];
@@ -153,6 +154,7 @@ async function loadSeriesDetail(id: string): Promise<SeriesDetail | null> {
     synopsis: s.synopsis,
     episodeCount: s.episodeCount,
     status: s.status,
+    posterUrl: s.posterUrl,
     aliases: s.aliases.map((a) => ({
       aliasTitle: a.aliasTitle,
       platform: a.platform,

@@ -12,7 +12,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && npm run db:seed",
     "icons": "tsx scripts/generate-icons.ts",
-    "scrape": "tsx scripts/scrape/run.ts"
+    "scrape": "tsx scripts/scrape/run.ts",
+    "posters": "tsx scripts/fetch-posters.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -33,6 +34,7 @@
     "playwright": "^1.61.1",
     "postcss": "^8.5.1",
     "prisma": "^5.22.0",
+    "sharp": "^0.35.3",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"

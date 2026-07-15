@@ -100,6 +100,8 @@ async function main() {
           aliases: [{ aliasTitle: raw.title, platform: adapter.platform, url: raw.url }],
           tropes: slugs,
           ...(raw.castNames.length ? { actors: raw.castNames.slice(0, 12) } : {}),
+          // Ignored by the importer; consumed by `npm run posters`.
+          ...(raw.posterSource ? { _posterSource: raw.posterSource } : {}),
           ...(unmapped.length ? { _unmappedGenres: unmapped } : {}),
         });
         summary.ok++;

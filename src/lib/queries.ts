@@ -8,6 +8,7 @@ export interface SeriesCardData {
   episodeCount: number;
   status: string;
   synopsis: string;
+  posterUrl: string | null;
   tropes: { name: string; slug: string }[];
   platforms: string[];
   score: CoinScoreResult;
@@ -70,6 +71,7 @@ function toCard(s: {
   episodeCount: number;
   status: string;
   synopsis: string;
+  posterUrl: string | null;
   tropeTags: { trope: { name: string; slug: string } }[];
   aliases: { platform: string }[];
 } & WithScoreData): SeriesCardData {
@@ -80,6 +82,7 @@ function toCard(s: {
     episodeCount: s.episodeCount,
     status: s.status,
     synopsis: s.synopsis,
+    posterUrl: s.posterUrl,
     tropes: s.tropeTags.map((t) => t.trope),
     platforms,
     score: scoreFor(s),

@@ -101,6 +101,7 @@ export default async function SeriesPage({
       <div className="relative">
         <Poster
           title={series.canonicalTitle}
+          posterUrl={series.posterUrl}
           showTitle={false}
           className="h-44 w-full lg:h-56"
         />
@@ -119,6 +120,7 @@ export default async function SeriesPage({
         <div className="flex items-end gap-3">
           <Poster
             title={series.canonicalTitle}
+            posterUrl={series.posterUrl}
             showTitle={false}
             className="h-28 w-20 shrink-0 rounded-xl border border-line shadow-lg"
           />
@@ -433,6 +435,10 @@ export default async function SeriesPage({
           </div>
         </section>
       )}
+
+      <p className="px-4 pt-8 text-center text-[10px] text-ink-faint/70">
+        Poster art © its respective platforms, shown small for identification only.
+      </p>
     </main>
   );
 }

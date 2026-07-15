@@ -240,6 +240,7 @@ export default async function HomePage() {
                   </span>
                   <Poster
                     title={s.canonicalTitle}
+                    posterUrl={s.posterUrl}
                     showTitle={false}
                     className="h-14 w-10 shrink-0 rounded-lg"
                   />
@@ -289,6 +290,10 @@ export default async function HomePage() {
 
       <p className="px-4 pt-10 text-center text-xs text-ink-faint">
         DramaScore · logged by night owls, for night owls 🌙
+      </p>
+      <p className="px-4 pt-2 text-center text-[10px] text-ink-faint/70">
+        Poster art © its respective platforms, shown small for identification.
+        Takedown requests honored — contact us.
       </p>
     </main>
   );

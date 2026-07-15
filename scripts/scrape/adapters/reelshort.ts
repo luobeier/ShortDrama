@@ -28,6 +28,8 @@ interface BookLike {
   description?: string;
   /** Fuller series-level blurb (chapter `description` is episode-specific). */
   special_desc?: string;
+  /** Poster/cover image on their CDN. */
+  book_pic?: string;
   /** Sparse on newer titles — tag_list is the structured taxonomy. */
   tag?: unknown[];
   /** category_id 1001 = cast names; excluded from genre labels. */
@@ -136,6 +138,10 @@ export const reelshort: PlatformAdapter = {
       statusHint: null,
       genreLabels: [...labels],
       castNames: [...castNames],
+      posterSource:
+        typeof book.book_pic === "string" && /^https?:\/\//.test(book.book_pic)
+          ? book.book_pic
+          : null,
     };
   },
 };

@@ -19,6 +19,8 @@ export interface RawSeries {
   genreLabels: string[];
   /** Lead cast names, when the platform exposes them. */
   castNames: string[];
+  /** Platform poster/cover image URL — localized later by `npm run posters`. */
+  posterSource: string | null;
 }
 
 export interface PlatformAdapter {

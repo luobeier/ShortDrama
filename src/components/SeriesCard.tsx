@@ -20,6 +20,7 @@ export function SeriesCard({
       <div className="relative overflow-hidden rounded-2xl border border-line shadow-card transition-transform duration-200 group-hover:-translate-y-0.5 group-active:scale-[0.98]">
         <Poster
           title={series.canonicalTitle}
+          posterUrl={series.posterUrl}
           showTitle={false}
           className="aspect-[2/3] w-full transition-transform duration-300 group-hover:scale-[1.04]"
         />

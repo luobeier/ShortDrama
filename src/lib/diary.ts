@@ -6,6 +6,7 @@ export { COIN_PER_EP, FREE_EP_RUNWAY } from "./spend";
 export interface DiaryEntry {
   seriesId: string;
   title: string;
+  posterUrl: string | null;
   status: string;
   platform: string;
   episodeCount: number;
@@ -61,6 +62,7 @@ export async function getDiary(
     return {
       seriesId: l.seriesId,
       title: l.series.canonicalTitle,
+      posterUrl: l.series.posterUrl,
       status: l.status,
       platform: l.platformWatchedOn,
       episodeCount: l.series.episodeCount,

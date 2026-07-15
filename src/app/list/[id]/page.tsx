@@ -109,6 +109,7 @@ export default async function ListPage({
               >
                 <Poster
                   title={s.canonicalTitle}
+                  posterUrl={s.posterUrl}
                   showTitle={false}
                   className="h-14 w-10 shrink-0 rounded-lg"
                 />

@@ -210,6 +210,7 @@ export function DiaryClient({
               >
                 <Poster
                   title={e.title}
+                  posterUrl={e.posterUrl}
                   showTitle={false}
                   className="h-16 w-11 shrink-0 rounded-lg"
                 />
