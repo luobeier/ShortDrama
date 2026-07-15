@@ -13,6 +13,9 @@ export interface ReviewView {
   handle: string | null;
   isFoundingMember: boolean;
   quarantined: boolean; // account < 24h old; shown but excluded from score
+  /** The reviewer's log outcome on this series (finished/abandoned/watching). */
+  watchStatus?: string | null;
+  bailedAtEp?: number | null;
 }
 
 export interface SeriesDetail {
@@ -28,6 +31,8 @@ export interface SeriesDetail {
   reviews: ReviewView[];
   totalReviewCount: number;
   logCount: number;
+  /** Eligible abandons' bail episodes — feeds the bail histogram. */
+  abandonEps: number[];
 }
 
 export function seriesCacheTag(id: string): string {
@@ -42,16 +47,22 @@ async function loadSeriesDetail(id: string): Promise<SeriesDetail | null> {
       tropeTags: { include: { trope: true } },
       logs: {
         select: {
+          userId: true,
           status: true,
           abandonedAtEp: true,
-          user: { select: { createdAt: true } },
+          user: { select: { createdAt: true, bannedAt: true } },
         },
       },
       reviews: {
         orderBy: { createdAt: "desc" },
         include: {
           user: {
-            select: { handle: true, isFoundingMember: true, createdAt: true },
+            select: {
+              handle: true,
+              isFoundingMember: true,
+              createdAt: true,
+              bannedAt: true,
+            },
           },
         },
       },
@@ -59,33 +70,56 @@ async function loadSeriesDetail(id: string): Promise<SeriesDetail | null> {
   });
   if (!s) return null;
 
+  // Banned users' activity is hidden entirely (and ineligible for the score).
+  const logs = s.logs.filter((l) => !l.user.bannedAt);
+  const visibleReviews = s.reviews.filter((r) => !r.user.bannedAt);
+
   const score = computeCoinScore(
-    s.logs.map((l) => ({
+    logs.map((l) => ({
       status: l.status,
       abandonedAtEp: l.abandonedAtEp,
       userCreatedAt: l.user.createdAt,
+      userBannedAt: l.user.bannedAt,
     })),
-    s.reviews.map((r) => ({
+    visibleReviews.map((r) => ({
       stars: r.stars,
       worthCoins: r.worthCoins,
       fallsApartAtEp: r.fallsApartAtEp,
       userCreatedAt: r.user.createdAt,
+      userBannedAt: r.user.bannedAt,
     }))
   );
 
   const now = Date.now();
-  const reviews: ReviewView[] = s.reviews.map((r) => ({
-    id: r.id,
-    stars: r.stars,
-    worthCoins: r.worthCoins,
-    endingVerdict: r.endingVerdict,
-    fallsApartAtEp: r.fallsApartAtEp,
-    oneLiner: r.oneLiner,
-    createdAt: r.createdAt.toISOString(),
-    handle: r.user.handle,
-    isFoundingMember: r.user.isFoundingMember,
-    quarantined: now - r.user.createdAt.getTime() < QUARANTINE_MS,
-  }));
+  const logByUser = new Map(logs.map((l) => [l.userId, l]));
+  const reviews: ReviewView[] = visibleReviews.map((r) => {
+    const log = logByUser.get(r.userId);
+    return {
+      id: r.id,
+      stars: r.stars,
+      worthCoins: r.worthCoins,
+      endingVerdict: r.endingVerdict,
+      fallsApartAtEp: r.fallsApartAtEp,
+      oneLiner: r.oneLiner,
+      createdAt: r.createdAt.toISOString(),
+      handle: r.user.handle,
+      isFoundingMember: r.user.isFoundingMember,
+      quarantined: now - r.user.createdAt.getTime() < QUARANTINE_MS,
+      watchStatus: log?.status ?? null,
+      bailedAtEp: log?.status === "abandoned" ? (log.abandonedAtEp ?? null) : null,
+    };
+  });
+
+  // Bail distribution from eligible (aged, unbanned) abandons only, matching
+  // the median stat's eligibility rules.
+  const abandonEps = logs
+    .filter(
+      (l) =>
+        l.status === "abandoned" &&
+        l.abandonedAtEp != null &&
+        now - l.user.createdAt.getTime() >= QUARANTINE_MS
+    )
+    .map((l) => l.abandonedAtEp as number);
 
   return {
     id: s.id,
@@ -102,8 +136,9 @@ async function loadSeriesDetail(id: string): Promise<SeriesDetail | null> {
     platforms: Array.from(new Set(s.aliases.map((a) => a.platform))),
     score,
     reviews,
-    totalReviewCount: s.reviews.length,
-    logCount: s.logs.length,
+    totalReviewCount: visibleReviews.length,
+    logCount: logs.length,
+    abandonEps,
   };
 }
 

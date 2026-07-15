@@ -63,7 +63,7 @@ export function BottomNav({ isLoggedIn, handle, isAdmin }: Props) {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/90 backdrop-blur-md">
-      <div className="mx-auto flex w-full max-w-md items-stretch justify-around">
+      <div className="mx-auto flex w-full max-w-7xl items-stretch justify-around px-4 lg:px-8">
         {items.map(({ href, label, Icon, match }) => {
           const active = match(pathname ?? "");
           return (

@@ -4,14 +4,13 @@ import { badRequest, asInt } from "@/lib/validate";
 import { isPlatform, isSeriesStatus } from "@/lib/enums";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { seriesCacheTag } from "@/lib/seriesDetail";
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+import { slugify } from "@/lib/slugify";
+import {
+  ImportPayloadError,
+  PURGE_CONFIRM_PHRASE,
+  purgeSeedData,
+  runImport,
+} from "@/lib/adminImport";
 
 /**
  * Env-flagged admin actions. All mutations require an email listed in
@@ -192,6 +191,94 @@ export async function POST(req: Request) {
       revalidateTag(seriesCacheTag(targetId));
       revalidatePath("/");
       return Response.json({ ok: true, targetId });
+    }
+
+    case "previewImport":
+    case "commitImport": {
+      const dryRun = body.action === "previewImport";
+      try {
+        const { summary, results, touchedSeriesIds } = await runImport(body.rows, { dryRun });
+        if (!dryRun) {
+          revalidatePath("/");
+          for (const id of touchedSeriesIds) {
+            revalidateTag(seriesCacheTag(id));
+            revalidatePath(`/series/${id}`);
+          }
+        }
+        return Response.json({ ok: true, mode: dryRun ? "preview" : "commit", summary, results });
+      } catch (e) {
+        if (e instanceof ImportPayloadError) return badRequest(e.message);
+        throw e;
+      }
+    }
+
+    case "dismissReport": {
+      const reportId = String(body.reportId ?? "");
+      await prisma.report.delete({ where: { id: reportId } }).catch(() => null);
+      return Response.json({ ok: true });
+    }
+
+    case "deleteReview": {
+      const reviewId = String(body.reviewId ?? "");
+      const review = await prisma.review.findUnique({
+        where: { id: reviewId },
+        select: { seriesId: true, userId: true, user: { select: { reviewCount: true } } },
+      });
+      if (!review) return badRequest("Review not found.", 404);
+      await prisma.$transaction([
+        prisma.review.delete({ where: { id: reviewId } }), // cascades its reports
+        prisma.user.update({
+          where: { id: review.userId },
+          data: { reviewCount: Math.max(0, review.user.reviewCount - 1) },
+        }),
+      ]);
+      revalidateTag(seriesCacheTag(review.seriesId));
+      revalidatePath(`/series/${review.seriesId}`);
+      revalidatePath("/");
+      return Response.json({ ok: true });
+    }
+
+    case "setUserBan": {
+      const targetId = String(body.userId ?? "");
+      const banned = Boolean(body.banned);
+      const target = await prisma.user.findUnique({
+        where: { id: targetId },
+        select: { id: true },
+      });
+      if (!target) return badRequest("User not found.", 404);
+      await prisma.user.update({
+        where: { id: targetId },
+        data: { bannedAt: banned ? new Date() : null },
+      });
+      // Their activity feeds many series' scores — refresh everything they touched.
+      const touched = await prisma.review.findMany({
+        where: { userId: targetId },
+        select: { seriesId: true },
+      });
+      for (const sid of new Set(touched.map((t) => t.seriesId))) {
+        revalidateTag(seriesCacheTag(sid));
+        revalidatePath(`/series/${sid}`);
+      }
+      revalidatePath("/");
+      return Response.json({ ok: true, banned });
+    }
+
+    case "purgeSeedData": {
+      if (body.confirm !== PURGE_CONFIRM_PHRASE)
+        return badRequest(`Type "${PURGE_CONFIRM_PHRASE}" to confirm.`);
+      const targets = {
+        syntheticUsers: Boolean(body.syntheticUsers),
+        seedSeries: Boolean(body.seedSeries),
+      };
+      if (!targets.syntheticUsers && !targets.seedSeries)
+        return badRequest("Pick at least one thing to purge.");
+      const { usersDeleted, seriesDeleted, deletedSeriesIds } = await purgeSeedData(targets);
+      revalidatePath("/");
+      for (const id of deletedSeriesIds) {
+        revalidateTag(seriesCacheTag(id));
+        revalidatePath(`/series/${id}`);
+      }
+      return Response.json({ ok: true, usersDeleted, seriesDeleted });
     }
 
     default:

@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { DiaryEntry, DiaryStats } from "@/lib/diary";
+import { estimatedSpendFor } from "@/lib/spend";
 import { Poster } from "./Poster";
 import { Stars } from "./Stars";
 import { LOG_STATUSES } from "@/lib/enums";
@@ -33,13 +35,21 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function DiaryClient({
   entries,
-  stats,
 }: {
   entries: DiaryEntry[];
-  stats: DiaryStats;
+  /** Superseded: stats are computed client-side so the year filter works. */
+  stats?: DiaryStats;
 }) {
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<string | "all">("all");
   const [tropeFilter, setTropeFilter] = useState<string | "all">("all");
+  const [yearFilter, setYearFilter] = useState<number | "all">("all");
+  const [bumping, setBumping] = useState<string | null>(null);
+
+  const years = useMemo(() => {
+    const ys = new Set(entries.map((e) => new Date(e.loggedAt).getFullYear()));
+    return [...ys].sort((a, b) => b - a);
+  }, [entries]);
 
   const tropeOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -47,19 +57,91 @@ export function DiaryClient({
     return [...map.entries()].map(([slug, name]) => ({ slug, name }));
   }, [entries]);
 
-  const filtered = entries.filter((e) => {
+  const inYear = useMemo(
+    () =>
+      yearFilter === "all"
+        ? entries
+        : entries.filter((e) => new Date(e.loggedAt).getFullYear() === yearFilter),
+    [entries, yearFilter]
+  );
+
+  // Stats follow the year filter — "2026" turns the tiles into a mini Wrapped.
+  const stats = useMemo(() => {
+    const finished = inYear.filter((e) => e.status === "finished").length;
+    const episodesWatched = inYear.reduce((s, e) => s + e.episodesWatched, 0);
+    const estimatedSpend = inYear.reduce(
+      (s, e) => s + estimatedSpendFor(e.episodesWatched),
+      0
+    );
+    const tally = new Map<string, { name: string; count: number }>();
+    for (const e of inYear) {
+      for (const t of e.tropes) {
+        const cur = tally.get(t.slug) ?? { name: t.name, count: 0 };
+        cur.count += 1;
+        tally.set(t.slug, cur);
+      }
+    }
+    const topTrope = [...tally.values()].sort((a, b) => b.count - a.count)[0] ?? null;
+    return { finished, episodesWatched, estimatedSpend, topTrope, total: inYear.length };
+  }, [inYear]);
+
+  const filtered = inYear.filter((e) => {
     if (statusFilter !== "all" && e.status !== statusFilter) return false;
     if (tropeFilter !== "all" && !e.tropes.some((t) => t.slug === tropeFilter))
       return false;
     return true;
   });
 
+  async function markFinished(e: DiaryEntry) {
+    setBumping(e.seriesId);
+    await fetch("/api/log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        seriesId: e.seriesId,
+        status: "finished",
+        platformWatchedOn: e.platform,
+      }),
+    }).catch(() => null);
+    setBumping(null);
+    router.refresh();
+  }
+
   return (
     <div className="mt-4">
+      {/* Year scope */}
+      {years.length > 1 && (
+        <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto px-4">
+          <button
+            onClick={() => setYearFilter("all")}
+            className={`chip ${yearFilter === "all" ? "chip-active" : ""}`}
+          >
+            All time
+          </button>
+          {years.map((y) => (
+            <button
+              key={y}
+              onClick={() => setYearFilter(y)}
+              className={`chip ${yearFilter === y ? "chip-active" : ""}`}
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 gap-2.5 px-4">
-        <StatTile label="Series finished" value={String(stats.finished)} sub={`${stats.totalLogged} logged total`} />
-        <StatTile label="Episodes watched" value={stats.episodesWatched.toLocaleString()} sub="in-progress not counted" />
+        <StatTile
+          label="Series finished"
+          value={String(stats.finished)}
+          sub={`${stats.total} logged${yearFilter === "all" ? " total" : ` in ${yearFilter}`}`}
+        />
+        <StatTile
+          label="Episodes watched"
+          value={stats.episodesWatched.toLocaleString()}
+          sub="in-progress not counted"
+        />
         <StatTile
           label="Estimated spend"
           value={`$${stats.estimatedSpend.toFixed(2)}`}
@@ -67,8 +149,8 @@ export function DiaryClient({
         />
         <StatTile
           label="Top trope"
-          value={stats.topTropes[0]?.name ?? "—"}
-          sub={stats.topTropes[0] ? `${stats.topTropes[0].count} series` : undefined}
+          value={stats.topTrope?.name ?? "—"}
+          sub={stats.topTrope ? `${stats.topTrope.count} series` : undefined}
         />
       </div>
 
@@ -120,25 +202,46 @@ export function DiaryClient({
           </p>
         ) : (
           filtered.map((e) => (
-            <Link key={e.seriesId} href={`/series/${e.seriesId}`} className="card flex items-center gap-3 p-2.5">
-              <Poster title={e.title} showTitle={false} className="h-16 w-11 shrink-0 rounded-lg" />
-              <div className="min-w-0 flex-1">
-                <h3 className="truncate text-sm font-bold">{e.title}</h3>
-                <p className="text-xs text-ink-faint">
-                  {STATUS_LABEL[e.status]}
-                  {e.status === "abandoned" && e.abandonedAtEp
-                    ? ` at ep ${e.abandonedAtEp}`
-                    : ""}{" "}
-                  · {e.platform}
-                </p>
-                {e.myStars != null && (
-                  <div className="mt-1">
-                    <Stars value={e.myStars} size={13} />
-                  </div>
-                )}
-              </div>
-              <span className="text-ink-faint">›</span>
-            </Link>
+            <div key={e.seriesId} className="card flex items-center gap-3 p-2.5">
+              <Link
+                href={`/series/${e.seriesId}`}
+                className="flex min-w-0 flex-1 items-center gap-3"
+              >
+                <Poster
+                  title={e.title}
+                  showTitle={false}
+                  className="h-16 w-11 shrink-0 rounded-lg"
+                />
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate text-sm font-bold">{e.title}</h3>
+                  <p className="text-xs text-ink-faint">
+                    {STATUS_LABEL[e.status]}
+                    {e.status === "abandoned" && e.abandonedAtEp
+                      ? ` at ep ${e.abandonedAtEp}`
+                      : ""}{" "}
+                    · {e.platform}
+                  </p>
+                  {e.myStars != null && (
+                    <div className="mt-1">
+                      <Stars value={e.myStars} size={13} />
+                    </div>
+                  )}
+                </div>
+              </Link>
+              {e.status === "watching" && (
+                <button
+                  onClick={() => markFinished(e)}
+                  disabled={bumping === e.seriesId}
+                  className="btn-ghost shrink-0 px-2.5 py-1.5 text-xs"
+                  title="Mark as finished"
+                >
+                  {bumping === e.seriesId ? "…" : "✓ Finished"}
+                </button>
+              )}
+              <Link href={`/series/${e.seriesId}`} className="shrink-0 text-ink-faint">
+                ›
+              </Link>
+            </div>
           ))
         )}
       </div>

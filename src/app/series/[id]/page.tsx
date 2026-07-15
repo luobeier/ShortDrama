@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getSeriesDetail } from "@/lib/seriesDetail";
+import { getSimilarSeries } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/session";
 import { getUserSeriesState } from "@/lib/userSeries";
 import { Poster } from "@/components/Poster";
@@ -11,6 +12,9 @@ import { ScoreBreakdown } from "@/components/ScoreBreakdown";
 import { LockedSection } from "@/components/LockedSection";
 import { LogReviewFlow } from "@/components/LogReviewFlow";
 import { ReviewCard } from "@/components/ReviewCard";
+import { ReviewList } from "@/components/ReviewList";
+import { BailHistogram } from "@/components/BailHistogram";
+import { SeriesCard } from "@/components/SeriesCard";
 import { scoreBand, MIN_ABANDONS_FOR_STAT } from "@/lib/score";
 import {
   ENDING_VERDICTS,
@@ -42,12 +46,19 @@ export default async function SeriesPage({
   if (!series) notFound();
 
   const user = await getCurrentUser();
-  const userState = user
-    ? await getUserSeriesState(user.id, series.id)
-    : { log: null, review: null };
+  const [userState, similar] = await Promise.all([
+    user ? getUserSeriesState(user.id, series.id) : { log: null, review: null },
+    getSimilarSeries(series.id, series.tropes.map((t) => t.slug)),
+  ]);
 
   const locked = !user?.hasUnlocked;
   const band = series.score.score !== null ? scoreBand(series.score.score) : null;
+
+  // One outbound watch link per platform (first alias with a URL wins).
+  const watchLinks = new Map<string, string>();
+  for (const a of series.aliases) {
+    if (a.url && !watchLinks.has(a.platform)) watchLinks.set(a.platform, a.url);
+  }
 
   // Ending-verdict distribution (part of the locked payload).
   const verdictCounts = ENDING_VERDICTS.map((v) => ({
@@ -63,7 +74,7 @@ export default async function SeriesPage({
         <Poster
           title={series.canonicalTitle}
           showTitle={false}
-          className="h-44 w-full"
+          className="h-44 w-full lg:h-56"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-bg/30 to-bg" />
         <Link
@@ -74,7 +85,9 @@ export default async function SeriesPage({
         </Link>
       </div>
 
-      <div className="-mt-10 px-4">
+      <div className="-mt-10 px-4 lg:grid lg:grid-cols-[1fr_380px] lg:gap-8">
+      {/* Left column: series info */}
+      <div>
         <div className="flex items-end gap-3">
           <Poster
             title={series.canonicalTitle}
@@ -114,6 +127,21 @@ export default async function SeriesPage({
             <PlatformDot key={p} platform={p} withLabel />
           ))}
         </div>
+        {watchLinks.size > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[...watchLinks.entries()].map(([platform, url]) => (
+              <a
+                key={platform}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-ghost px-3.5 py-2 text-sm"
+              >
+                ▶ Watch on {platform} <span className="text-ink-faint">↗</span>
+              </a>
+            ))}
+          </div>
+        )}
         {series.aliases.length > 0 && (
           <p className="mt-2 text-xs leading-relaxed text-ink-faint">
             {series.aliases.map((a, i) => (
@@ -157,10 +185,12 @@ export default async function SeriesPage({
             </p>
           )}
         </div>
-      </div>
+      </div>{/* end left column */}
 
+      {/* Right column: score + reviews */}
+      <div>
       {/* Coin Score section */}
-      <section className="mt-7 px-4">
+      <section className="mt-7 lg:mt-0">
         <h2 className="mb-2 text-lg font-black">🪙 Coin Score</h2>
         {!series.score.hasEnoughReviews ? (
           <div className="card p-5 text-center">
@@ -194,10 +224,16 @@ export default async function SeriesPage({
       {series.score.hasEnoughReviews &&
         (series.score.commonAbandonEp !== null ||
           series.score.fallsApartMedianEp !== null) && (
-          <section className="mt-5 px-4">
+          <section className="mt-5">
             <LockedSection locked={locked} isLoggedIn={!!user}>
               <div className="card flex flex-col gap-3 p-4">
                 <h3 className="text-sm font-black">📉 Where people bail</h3>
+                {series.abandonEps.length >= MIN_ABANDONS_FOR_STAT && (
+                  <BailHistogram
+                    abandonEps={series.abandonEps}
+                    episodeCount={series.episodeCount}
+                  />
+                )}
                 {series.score.commonAbandonEp !== null && (
                   <p className="text-sm text-ink-soft">
                     Most common abandonment point:{" "}
@@ -237,7 +273,7 @@ export default async function SeriesPage({
 
       {/* Your review (always visible if you wrote one) */}
       {userState.review && user && (
-        <section className="mt-6 px-4">
+        <section className="mt-6">
           <h2 className="mb-2 text-lg font-black">Your review</h2>
           <ReviewCard
             review={{
@@ -258,7 +294,7 @@ export default async function SeriesPage({
       )}
 
       {/* Community reviews (locked list) */}
-      <section className="mt-6 px-4">
+      <section className="mt-6">
         <h2 className="mb-2 text-lg font-black">
           Reviews{" "}
           <span className="text-sm font-normal text-ink-faint">
@@ -271,20 +307,41 @@ export default async function SeriesPage({
           </div>
         ) : (
           <LockedSection locked={locked} isLoggedIn={!!user}>
-            <div className="flex flex-col gap-2.5">
-              {(locked ? series.reviews.slice(0, 4) : series.reviews).map((r) => (
-                <ReviewCard key={r.id} review={r} isMine={false} />
-              ))}
-            </div>
+            {/* Cap server-side so locked visitors never receive the full
+                review payload in the page source (give-to-get integrity). */}
+            <ReviewList
+              reviews={locked ? series.reviews.slice(0, 4) : series.reviews}
+              locked={locked}
+            />
           </LockedSection>
         )}
       </section>
 
       {locked && withOneLiners.length > 0 && (
-        <p className="mt-4 px-4 text-center text-xs text-ink-faint">
+        <p className="mt-4 text-center text-xs text-ink-faint">
           {withOneLiners.length} one-liners and full breakdowns are waiting behind
           your first review.
         </p>
+      )}
+      </div>{/* end right column */}
+      </div>{/* end two-col grid */}
+
+      {/* More like this */}
+      {similar.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-3 px-4 text-xl font-black tracking-tight">
+            🍿 More like this
+          </h2>
+          <div className="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-pl-4 px-4 pb-1 lg:grid lg:grid-cols-6 lg:gap-4 lg:overflow-visible">
+            {similar.map((s) => (
+              <SeriesCard
+                key={s.id}
+                series={s}
+                className="w-[42vw] max-w-[170px] shrink-0 snap-start sm:w-[160px] lg:w-auto lg:max-w-none"
+              />
+            ))}
+          </div>
+        </section>
       )}
     </main>
   );

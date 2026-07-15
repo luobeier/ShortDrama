@@ -1,29 +1,32 @@
 // DramaScore — data model
-// SQLite to start (simple), designed to migrate to Postgres later.
-// Note: SQLite has no native enums, so enum-like fields are stored as strings
-// and validated in application code (see src/lib/enums.ts).
+// Postgres via Supabase. Enum-like fields are stored as strings and validated
+// in application code (see src/lib/enums.ts) — kept from the SQLite era so the
+// data stays portable.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // transaction pooler (app queries)
+  directUrl = env("DIRECT_URL") // session pooler (db push / migrations)
 }
 
 model User {
-  id               String   @id @default(cuid())
-  email            String   @unique
-  handle           String?  @unique // chosen on first login; no real names anywhere
+  id               String    @id @default(cuid())
+  email            String    @unique
+  handle           String?   @unique // chosen on first login; no real names anywhere
   image            String?
-  reviewCount      Int      @default(0)
-  isFoundingMember Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  reviewCount      Int       @default(0)
+  isFoundingMember Boolean   @default(false)
+  bannedAt         DateTime? // set by admin; banned users can't log/review and are excluded from scores
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   logs    Log[]
   reviews Review[]
+  reports Report[]
 }
 
 model Series {
@@ -107,9 +110,25 @@ model Review {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  series Series @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  series  Series   @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  reports Report[]
 
   @@unique([userId, seriesId]) // one review per user per series, editable
   @@index([seriesId])
+}
+
+// A community flag on a review, resolved by an admin (dismiss / delete / ban).
+model Report {
+  id         String   @id @default(cuid())
+  reviewId   String
+  reporterId String
+  reason     String? // optional free text
+  createdAt  DateTime @default(now())
+
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reporter User   @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, reporterId]) // one report per user per review
+  @@index([reviewId])
 }

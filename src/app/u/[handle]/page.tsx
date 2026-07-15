@@ -86,6 +86,7 @@ export default async function ProfilePage({
       </div>
 
       <section className="mt-7 px-4">
+        <div className="mx-auto max-w-2xl">
         <h2 className="mb-2 text-lg font-black">Recent reviews</h2>
         {reviews.length === 0 ? (
           <div className="card p-5 text-center text-sm text-ink-soft">
@@ -121,6 +122,7 @@ export default async function ProfilePage({
             ))}
           </div>
         )}
+        </div>
       </section>
     </main>
   );

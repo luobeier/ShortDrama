@@ -1,7 +1,8 @@
-import { ImageResponse } from "next/og";
+import { ImageResponse } from "@vercel/og";
 import { getCurrentUser } from "@/lib/session";
 import { getDiary } from "@/lib/diary";
 import { posterGradient } from "@/lib/gradient";
+import { ogFonts } from "@/lib/ogFonts";
 
 export const runtime = "nodejs";
 
@@ -132,9 +133,20 @@ export async function GET() {
               <span style={{ fontSize: "44px", fontWeight: 900, marginTop: "8px" }}>
                 {topSeries.title}
               </span>
-              <span style={{ fontSize: "40px", color: "#ffcc4d", marginTop: "6px" }}>
-                {"★".repeat(Math.round(topSeries.stars))}
-                {"☆".repeat(5 - Math.round(topSeries.stars))}
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  fontSize: "36px",
+                  color: "#ffcc4d",
+                  marginTop: "6px",
+                }}
+              >
+                <span>{"⭐".repeat(Math.round(topSeries.stars))}</span>
+                <span style={{ fontSize: "28px", color: "#7a7a90" }}>
+                  {Math.round(topSeries.stars)}/5
+                </span>
               </span>
             </div>
           </div>
@@ -156,6 +168,7 @@ export async function GET() {
     {
       width: 1080,
       height: 1920,
+      fonts: ogFonts(),
       headers: { "Cache-Control": "no-store" },
     }
   );

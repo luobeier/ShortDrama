@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
+import { episodesWatchedFor, estimatedSpendFor } from "./spend";
 
-export const COIN_PER_EP = 0.15; // rough $ per episode past the free runway
-export const FREE_EP_RUNWAY = 10; // first ~10 eps usually free-ish
+export { COIN_PER_EP, FREE_EP_RUNWAY } from "./spend";
 
 export interface DiaryEntry {
   seriesId: string;
@@ -28,20 +28,7 @@ export interface DiaryStats {
   topRated: { seriesId: string; title: string; stars: number }[];
 }
 
-/**
- * Episodes a user has watched of a given series.
- * finished  -> whole thing; abandoned -> where they bailed; watching -> unknown
- * progress, so it's excluded from the watched total (noted in the UI).
- */
-export function episodesWatchedFor(entry: {
-  status: string;
-  episodeCount: number;
-  abandonedAtEp: number | null;
-}): number {
-  if (entry.status === "finished") return entry.episodeCount;
-  if (entry.status === "abandoned") return entry.abandonedAtEp ?? 0;
-  return 0;
-}
+export { episodesWatchedFor } from "./spend";
 
 export async function getDiary(
   userId: string
@@ -92,7 +79,7 @@ export async function getDiary(
   const watching = entries.filter((e) => e.status === "watching").length;
   const episodesWatched = entries.reduce((s, e) => s + e.episodesWatched, 0);
   const estimatedSpend = entries.reduce(
-    (s, e) => s + Math.max(0, e.episodesWatched - FREE_EP_RUNWAY) * COIN_PER_EP,
+    (s, e) => s + estimatedSpendFor(e.episodesWatched),
     0
   );
 

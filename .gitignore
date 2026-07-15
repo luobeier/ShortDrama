@@ -29,5 +29,8 @@ yarn-error.log*
 /prisma/*.db-journal
 /prisma/dev.db
 
+# scraper output (ephemeral, human-reviewed before import)
+/data/scraped/
+
 # typescript
 *.tsbuildinfo

@@ -19,10 +19,20 @@ export const MIN_ABANDONS_FOR_STAT = 3;
 
 const WEIGHTS = { completion: 0.4, stars: 0.35, worth: 0.25 };
 
+// Bayesian shrinkage: with few reviews, the displayed score is pulled toward a
+// neutral prior so three enthusiastic friends can't print a 95 that outranks a
+// 50-review 85. Equivalent to adding SHRINKAGE_WEIGHT phantom reviews at
+// SHRINKAGE_PRIOR. At 3 reviews the raw score carries 3/8 of the weight; by
+// ~20 reviews shrinkage is negligible. Breakdown bars stay raw — they explain
+// the inputs; only the headline coin is confidence-adjusted.
+export const SHRINKAGE_WEIGHT = 5;
+export const SHRINKAGE_PRIOR = 0.6;
+
 export interface ScoreLogInput {
   status: LogStatus | string;
   abandonedAtEp: number | null;
   userCreatedAt: Date;
+  userBannedAt?: Date | null;
 }
 
 export interface ScoreReviewInput {
@@ -30,6 +40,7 @@ export interface ScoreReviewInput {
   worthCoins: boolean;
   fallsApartAtEp: number | null;
   userCreatedAt: Date;
+  userBannedAt?: Date | null;
 }
 
 export interface CoinScoreResult {
@@ -63,7 +74,12 @@ function median(nums: number[]): number | null {
     : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
-function isEligible(userCreatedAt: Date, now: number): boolean {
+function isEligible(
+  userCreatedAt: Date,
+  now: number,
+  bannedAt?: Date | null
+): boolean {
+  if (bannedAt) return false;
   return now - userCreatedAt.getTime() >= QUARANTINE_MS;
 }
 
@@ -72,9 +88,11 @@ export function computeCoinScore(
   reviews: ScoreReviewInput[],
   now: number = Date.now()
 ): CoinScoreResult {
-  const eligibleLogs = logs.filter((l) => isEligible(l.userCreatedAt, now));
+  const eligibleLogs = logs.filter((l) =>
+    isEligible(l.userCreatedAt, now, l.userBannedAt)
+  );
   const eligibleReviews = reviews.filter((r) =>
-    isEligible(r.userCreatedAt, now)
+    isEligible(r.userCreatedAt, now, r.userBannedAt)
   );
 
   const finishedCount = eligibleLogs.filter((l) => l.status === "finished").length;
@@ -112,8 +130,13 @@ export function computeCoinScore(
       : null;
 
   const hasEnoughReviews = eligibleReviews.length >= MIN_REVIEWS_FOR_SCORE;
+  const n = eligibleReviews.length;
+  const shrunkScore =
+    rawScore !== null
+      ? (n * rawScore + SHRINKAGE_WEIGHT * SHRINKAGE_PRIOR) / (n + SHRINKAGE_WEIGHT)
+      : null;
   const score =
-    hasEnoughReviews && rawScore !== null ? Math.round(rawScore * 100) : null;
+    hasEnoughReviews && shrunkScore !== null ? Math.round(shrunkScore * 100) : null;
 
   const certifiedBinge =
     score !== null &&

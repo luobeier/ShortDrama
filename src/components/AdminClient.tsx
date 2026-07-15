@@ -23,14 +23,31 @@ interface AdminTrope {
   slug: string;
 }
 
-type Tab = "series" | "merge" | "tropes";
+interface AdminReport {
+  id: string;
+  reason: string | null;
+  createdAt: string;
+  reporterHandle: string | null;
+  reviewId: string;
+  stars: number;
+  oneLiner: string | null;
+  authorId: string;
+  authorHandle: string | null;
+  authorBanned: boolean;
+  seriesId: string;
+  seriesTitle: string;
+}
+
+type Tab = "series" | "merge" | "tropes" | "import" | "mods";
 
 export function AdminClient({
   series,
   tropes,
+  reports,
 }: {
   series: AdminSeries[];
   tropes: AdminTrope[];
+  reports: AdminReport[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("series");
@@ -59,7 +76,7 @@ export function AdminClient({
   return (
     <div className="px-4">
       <div className="mb-4 flex gap-2">
-        {(["series", "merge", "tropes"] as Tab[]).map((t) => (
+        {(["series", "merge", "tropes", "import", "mods"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -81,6 +98,8 @@ export function AdminClient({
       )}
       {tab === "merge" && <MergeTab series={series} call={call} busy={busy} />}
       {tab === "tropes" && <TropesTab tropes={tropes} call={call} busy={busy} />}
+      {tab === "import" && <ImportTab />}
+      {tab === "mods" && <ModsTab reports={reports} call={call} busy={busy} />}
     </div>
   );
 }
@@ -363,5 +382,380 @@ function TropesTab({
         ))}
       </div>
     </div>
+  );
+}
+
+// ---- Bulk import ------------------------------------------------------------
+
+interface ImportRowResult {
+  index: number;
+  title: string;
+  action: "create" | "update" | "error";
+  matchedBy?: "canonicalTitle" | "alias";
+  newAliases: number;
+  newTropes: string[];
+  warnings: string[];
+  error?: string;
+  applied?: boolean;
+}
+
+interface ImportResponse {
+  mode: "preview" | "commit";
+  summary: {
+    total: number;
+    creates: number;
+    updates: number;
+    errors: number;
+    aliasesAdded: number;
+    newTropes: string[];
+    applied?: number;
+    failed?: number;
+  };
+  results: ImportRowResult[];
+}
+
+const IMPORT_EXAMPLE = `[
+  {
+    "canonicalTitle": "Example Series",
+    "synopsis": "One or two sentences.",
+    "episodeCount": 70,
+    "status": "ongoing",
+    "aliases": [
+      { "aliasTitle": "Example on ReelShort", "platform": "ReelShort", "url": "https://…" }
+    ],
+    "tropes": ["revenge", "billionaire-ceo"]
+  }
+]`;
+
+function ImportTab() {
+  const router = useRouter();
+  const [text, setText] = useState("");
+  const [phase, setPhase] = useState<"idle" | "validating" | "importing">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<ImportResponse | null>(null);
+  const [snapshot, setSnapshot] = useState<string | null>(null);
+  const [committed, setCommitted] = useState<ImportResponse | null>(null);
+
+  async function post(payload: Record<string, unknown>) {
+    const res = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, data };
+  }
+
+  function parseRows(): unknown | null {
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      setError(`Not valid JSON: ${e instanceof Error ? e.message : "parse failed"}`);
+      return null;
+    }
+  }
+
+  async function validate() {
+    setError(null);
+    setCommitted(null);
+    setPreview(null);
+    const rows = parseRows();
+    if (rows === null) return;
+    setPhase("validating");
+    const { ok, data } = await post({ action: "previewImport", rows });
+    setPhase("idle");
+    if (!ok) {
+      setError(data.error ?? "Validation failed.");
+      return;
+    }
+    setPreview(data as ImportResponse);
+    setSnapshot(text);
+  }
+
+  async function doImport() {
+    setError(null);
+    const rows = parseRows();
+    if (rows === null) return;
+    setPhase("importing");
+    const { ok, data } = await post({ action: "commitImport", rows });
+    setPhase("idle");
+    if (!ok) {
+      setError(data.error ?? "Import failed.");
+      return;
+    }
+    setCommitted(data as ImportResponse);
+    setPreview(null);
+    router.refresh();
+  }
+
+  const stale = preview !== null && snapshot !== text;
+  const importableRows = preview ? preview.summary.creates + preview.summary.updates : 0;
+  const shown = committed ?? (stale ? null : preview);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="card flex flex-col gap-3 p-4">
+        <p className="text-sm font-bold">Bulk import</p>
+        <p className="text-xs text-ink-soft">
+          Paste a JSON array of series. Existing series are matched by title{" "}
+          <i>and</i> alias (case-insensitive) and updated — aliases and tropes are
+          added, never removed. Unknown tropes are created.
+        </p>
+        <details className="text-xs text-ink-faint">
+          <summary className="cursor-pointer">Row format</summary>
+          <pre className="mt-2 overflow-x-auto rounded-xl border border-line bg-bg-soft p-3">
+            {IMPORT_EXAMPLE}
+          </pre>
+        </details>
+        <textarea
+          className="input resize-y font-mono text-xs"
+          rows={10}
+          placeholder='[ { "canonicalTitle": "…", … } ]'
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="flex gap-2">
+          <button
+            onClick={validate}
+            disabled={phase !== "idle" || !text.trim()}
+            className="btn-ghost flex-1"
+          >
+            {phase === "validating" ? "Validating…" : "Validate"}
+          </button>
+          <button
+            onClick={doImport}
+            disabled={phase !== "idle" || !preview || stale || importableRows === 0}
+            className="btn-primary flex-1"
+          >
+            {phase === "importing"
+              ? "Importing…"
+              : preview && !stale
+                ? `Import ${importableRows} row${importableRows === 1 ? "" : "s"}`
+                : "Import"}
+          </button>
+        </div>
+        {stale && (
+          <p className="text-xs text-warn">Payload changed since validation — validate again.</p>
+        )}
+        {error && <p className="text-sm text-bad">⚠ {error}</p>}
+      </div>
+
+      {shown && (
+        <div className="card flex flex-col gap-2 p-4">
+          <p className="text-sm font-bold">
+            {shown.mode === "commit" ? "Import results" : "Preview — nothing written yet"}
+          </p>
+          <p className="text-xs text-ink-soft">
+            {shown.summary.creates} create · {shown.summary.updates} update ·{" "}
+            {shown.summary.errors} error · +{shown.summary.aliasesAdded} aliases
+            {shown.mode === "commit" &&
+              ` · ${shown.summary.applied ?? 0} applied, ${shown.summary.failed ?? 0} failed`}
+          </p>
+          {shown.summary.newTropes.length > 0 && (
+            <p className="text-xs text-warn">
+              New tropes {shown.mode === "commit" ? "created" : "to create"}:{" "}
+              {shown.summary.newTropes.join(", ")}
+            </p>
+          )}
+          <ul className="flex flex-col gap-1.5">
+            {shown.results.map((r) => (
+              <li key={r.index} className="rounded-xl border border-line bg-bg-soft px-3 py-2 text-xs">
+                <span
+                  className={`mr-2 font-bold uppercase ${
+                    r.action === "create"
+                      ? "text-good"
+                      : r.action === "update"
+                        ? "text-coin"
+                        : "text-bad"
+                  }`}
+                >
+                  {r.action}
+                  {r.applied === false && " ✗"}
+                </span>
+                <span className="font-semibold">{r.title}</span>
+                {r.matchedBy === "alias" && <span className="text-ink-faint"> (via alias)</span>}
+                {r.newAliases > 0 && <span className="text-ink-soft"> · +{r.newAliases} alias{r.newAliases === 1 ? "" : "es"}</span>}
+                {r.newTropes.length > 0 && (
+                  <span className="text-warn"> · new tropes: {r.newTropes.join(", ")}</span>
+                )}
+                {r.error && <p className="mt-1 text-bad">{r.error}</p>}
+                {r.warnings.map((w, i) => (
+                  <p key={i} className="mt-1 text-ink-faint">
+                    {w}
+                  </p>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <PurgeDangerZone />
+    </div>
+  );
+}
+
+function ModsTab({
+  reports,
+  call,
+  busy,
+}: {
+  reports: AdminReport[];
+  call: (p: Record<string, unknown>) => Promise<boolean>;
+  busy: boolean;
+}) {
+  if (reports.length === 0) {
+    return (
+      <div className="card p-6 text-center text-sm text-ink-soft">
+        🧹 No open reports. The community is behaving (for now).
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-ink-faint">
+        {reports.length} open report{reports.length === 1 ? "" : "s"} — dismiss,
+        delete the review, or ban the author (removes all their activity from
+        scores and hides their reviews).
+      </p>
+      {reports.map((r) => (
+        <div key={r.id} className="card flex flex-col gap-2 p-3.5">
+          <p className="text-xs text-ink-faint">
+            @{r.reporterHandle ?? "anon"} flagged{" "}
+            <b className="text-ink-soft">@{r.authorHandle ?? "anon"}</b>
+            {r.authorBanned && (
+              <span className="ml-1 rounded-full bg-bad/20 px-2 py-0.5 text-[10px] font-bold text-bad">
+                banned
+              </span>
+            )}{" "}
+            on <b className="text-ink-soft">{r.seriesTitle}</b>
+          </p>
+          <p className="text-sm">
+            <span className="text-coin">{"★".repeat(r.stars)}</span>
+            {r.oneLiner ? ` “${r.oneLiner}”` : " (no one-liner)"}
+          </p>
+          {r.reason && <p className="text-xs text-warn">Reason: {r.reason}</p>}
+          <div className="mt-1 flex flex-wrap gap-2">
+            <button
+              onClick={() => call({ action: "dismissReport", reportId: r.id })}
+              disabled={busy}
+              className="btn-ghost px-3 py-1.5 text-xs"
+            >
+              Dismiss
+            </button>
+            <button
+              onClick={() => {
+                if (confirm("Delete this review? This can't be undone.")) {
+                  call({ action: "deleteReview", reviewId: r.reviewId });
+                }
+              }}
+              disabled={busy}
+              className="btn-ghost px-3 py-1.5 text-xs text-warn"
+            >
+              Delete review
+            </button>
+            <button
+              onClick={() => {
+                const verb = r.authorBanned ? "Unban" : "Ban";
+                if (confirm(`${verb} @${r.authorHandle ?? "anon"}?`)) {
+                  call({
+                    action: "setUserBan",
+                    userId: r.authorId,
+                    banned: !r.authorBanned,
+                  });
+                }
+              }}
+              disabled={busy}
+              className={`btn-ghost px-3 py-1.5 text-xs ${r.authorBanned ? "text-good" : "text-bad"}`}
+            >
+              {r.authorBanned ? "Unban author" : "Ban author"}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const PURGE_PHRASE = "PURGE SEED DATA";
+
+function PurgeDangerZone() {
+  const router = useRouter();
+  const [syntheticUsers, setSyntheticUsers] = useState(true);
+  const [seedSeries, setSeedSeries] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function purge() {
+    setBusy(true);
+    setMsg(null);
+    const res = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "purgeSeedData",
+        confirm: confirmText,
+        syntheticUsers,
+        seedSeries,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) {
+      setMsg(`⚠ ${data.error ?? "Purge failed."}`);
+      return;
+    }
+    setMsg(`✓ Deleted ${data.usersDeleted} synthetic users and ${data.seriesDeleted} placeholder series.`);
+    setConfirmText("");
+    router.refresh();
+  }
+
+  return (
+    <details className="rounded-2xl border border-bad/50 bg-bad/5 p-4">
+      <summary className="cursor-pointer text-sm font-bold text-bad">
+        Danger zone — purge placeholder data
+      </summary>
+      <div className="mt-3 flex flex-col gap-3">
+        <p className="text-xs text-ink-soft">
+          One-time pre-launch cleanup. Deleting the placeholder series also deletes{" "}
+          <b>every</b> log and review on them — including any left by real accounts.
+          Tropes are never deleted. This can&apos;t be undone (dev fallback:{" "}
+          <code>npm run db:reset</code> restores the seed).
+        </p>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={syntheticUsers}
+            onChange={(e) => setSyntheticUsers(e.target.checked)}
+          />
+          Synthetic reviewer accounts (@seed.dramascore.app) + their logs/reviews
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={seedSeries}
+            onChange={(e) => setSeedSeries(e.target.checked)}
+          />
+          The 30 placeholder series (matched by exact seed title)
+        </label>
+        <input
+          className="input"
+          placeholder={`Type "${PURGE_PHRASE}" to confirm`}
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+        />
+        <button
+          onClick={purge}
+          disabled={busy || confirmText !== PURGE_PHRASE || (!syntheticUsers && !seedSeries)}
+          className="btn bg-bad text-white"
+        >
+          {busy ? "Purging…" : "Purge selected"}
+        </button>
+        {msg && (
+          <p className={`text-sm ${msg.startsWith("✓") ? "text-good" : "text-bad"}`}>{msg}</p>
+        )}
+      </div>
+    </details>
   );
 }

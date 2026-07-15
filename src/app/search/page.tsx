@@ -42,7 +42,7 @@ export default async function SearchPage({
               </p>
             </div>
           ) : (
-            <div className="mt-3 grid grid-cols-2 gap-3 px-4">
+            <div className="mt-3 grid grid-cols-2 gap-3 px-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {results.map((s) => (
                 <SeriesCard key={s.id} series={s} />
               ))}

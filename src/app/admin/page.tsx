@@ -22,7 +22,7 @@ export default async function AdminPage() {
   }
   if (!(await isAdmin())) redirect("/signin?next=/admin");
 
-  const [series, tropes] = await Promise.all([
+  const [series, tropes, reports] = await Promise.all([
     prisma.series.findMany({
       orderBy: { canonicalTitle: "asc" },
       select: {
@@ -37,6 +37,19 @@ export default async function AdminPage() {
       },
     }),
     prisma.trope.findMany({ orderBy: { name: "asc" } }),
+    prisma.report.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: {
+        reporter: { select: { handle: true } },
+        review: {
+          include: {
+            user: { select: { id: true, handle: true, bannedAt: true } },
+            series: { select: { id: true, canonicalTitle: true } },
+          },
+        },
+      },
+    }),
   ]);
 
   return (
@@ -64,6 +77,20 @@ export default async function AdminPage() {
           aliases: s._count.aliases,
         }))}
         tropes={tropes.map((t) => ({ id: t.id, name: t.name, slug: t.slug }))}
+        reports={reports.map((r) => ({
+          id: r.id,
+          reason: r.reason,
+          createdAt: r.createdAt.toISOString(),
+          reporterHandle: r.reporter.handle,
+          reviewId: r.review.id,
+          stars: r.review.stars,
+          oneLiner: r.review.oneLiner,
+          authorId: r.review.user.id,
+          authorHandle: r.review.user.handle,
+          authorBanned: r.review.user.bannedAt !== null,
+          seriesId: r.review.series.id,
+          seriesTitle: r.review.series.canonicalTitle,
+        }))}
       />
     </main>
   );

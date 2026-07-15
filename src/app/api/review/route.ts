@@ -18,6 +18,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export async function POST(req: Request) {
   const userId = await requireUserId();
   if (!userId) return badRequest("You need to sign in first.", 401);
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { bannedAt: true },
+  });
+  if (me?.bannedAt) return badRequest("This account is suspended.", 403);
 
   const body = await req.json().catch(() => null);
   if (!body) return badRequest("Invalid request body.");

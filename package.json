@@ -10,13 +10,16 @@
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma db push --force-reset && npm run db:seed"
+    "db:reset": "prisma db push --force-reset && npm run db:seed",
+    "icons": "tsx scripts/generate-icons.ts",
+    "scrape": "tsx scripts/scrape/run.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@vercel/og": "^0.11.1",
     "next": "15.1.6",
     "next-auth": "^4.24.11",
     "react": "^19.0.0",

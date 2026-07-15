@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Stars } from "./Stars";
+import { ReviewActions } from "./ReviewActions";
 import {
   ENDING_VERDICT_EMOJI,
   ENDING_VERDICT_LABELS,
@@ -47,7 +48,10 @@ export function ReviewCard({
             </span>
           )}
         </div>
-        <span className="shrink-0 text-[11px] text-ink-faint">{timeAgo(review.createdAt)}</span>
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="text-[11px] text-ink-faint">{timeAgo(review.createdAt)}</span>
+          <ReviewActions reviewId={review.id} isMine={isMine} />
+        </span>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -62,6 +66,14 @@ export function ReviewCard({
         </span>
         {review.fallsApartAtEp != null && (
           <span className="text-xs text-warn">falls apart ~ep {review.fallsApartAtEp}</span>
+        )}
+        {review.watchStatus === "finished" && (
+          <span className="text-xs text-good">✅ finished it</span>
+        )}
+        {review.watchStatus === "abandoned" && (
+          <span className="text-xs text-ink-faint">
+            🏳️ bailed{review.bailedAtEp != null ? ` at ep ${review.bailedAtEp}` : ""}
+          </span>
         )}
       </div>
 

@@ -19,7 +19,7 @@ const scoreSelect = {
     select: {
       status: true,
       abandonedAtEp: true,
-      user: { select: { createdAt: true } },
+      user: { select: { createdAt: true, bannedAt: true } },
     },
   },
   reviews: {
@@ -27,18 +27,22 @@ const scoreSelect = {
       stars: true,
       worthCoins: true,
       fallsApartAtEp: true,
-      user: { select: { createdAt: true } },
+      user: { select: { createdAt: true, bannedAt: true } },
     },
   },
 } as const;
 
 type WithScoreData = {
-  logs: { status: string; abandonedAtEp: number | null; user: { createdAt: Date } }[];
+  logs: {
+    status: string;
+    abandonedAtEp: number | null;
+    user: { createdAt: Date; bannedAt: Date | null };
+  }[];
   reviews: {
     stars: number;
     worthCoins: boolean;
     fallsApartAtEp: number | null;
-    user: { createdAt: Date };
+    user: { createdAt: Date; bannedAt: Date | null };
   }[];
 };
 
@@ -48,12 +52,14 @@ export function scoreFor(data: WithScoreData): CoinScoreResult {
       status: l.status,
       abandonedAtEp: l.abandonedAtEp,
       userCreatedAt: l.user.createdAt,
+      userBannedAt: l.user.bannedAt,
     })),
     data.reviews.map((r) => ({
       stars: r.stars,
       worthCoins: r.worthCoins,
       fallsApartAtEp: r.fallsApartAtEp,
       userCreatedAt: r.user.createdAt,
+      userBannedAt: r.user.bannedAt,
     }))
   );
 }
@@ -118,21 +124,59 @@ export async function getCertifiedBinge(limit = 10): Promise<SeriesCardData[]> {
     .slice(0, limit);
 }
 
-/** Search canonical titles AND aliases. */
+/** Fold accents + case so "fiance" matches "Fiancé" (SQLite LIKE can't). */
+function foldText(s: string): string {
+  // Strip combining diacritics (U+0300–U+036F) after NFD decomposition.
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+}
+
+/**
+ * Search canonical titles AND aliases, accent- and case-insensitively.
+ * The catalog is small (hundreds of titles), so we match folded strings in
+ * memory rather than maintaining a normalized shadow column.
+ */
 export async function searchSeries(q: string): Promise<SeriesCardData[]> {
-  const query = q.trim();
+  const query = foldText(q.trim());
   if (!query) return [];
-  const series = await prisma.series.findMany({
-    where: {
-      OR: [
-        { canonicalTitle: { contains: query } },
-        { aliases: { some: { aliasTitle: { contains: query } } } },
-      ],
+
+  const titles = await prisma.series.findMany({
+    select: {
+      id: true,
+      canonicalTitle: true,
+      aliases: { select: { aliasTitle: true } },
     },
-    include: cardInclude,
-    take: 40,
   });
-  return series.map(toCard);
+
+  // Rank: exact > prefix > substring, canonical matches before alias-only.
+  const ranked = titles
+    .map((s) => {
+      const names = [s.canonicalTitle, ...s.aliases.map((a) => a.aliasTitle)];
+      let best = Infinity;
+      names.forEach((name, i) => {
+        const folded = foldText(name);
+        const isAlias = i > 0 ? 1 : 0;
+        if (folded === query) best = Math.min(best, 0 + isAlias);
+        else if (folded.startsWith(query)) best = Math.min(best, 2 + isAlias);
+        else if (folded.includes(query)) best = Math.min(best, 4 + isAlias);
+      });
+      return { id: s.id, rank: best };
+    })
+    .filter((s) => s.rank !== Infinity)
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 40);
+  if (ranked.length === 0) return [];
+
+  const series = await prisma.series.findMany({
+    where: { id: { in: ranked.map((r) => r.id) } },
+    include: cardInclude,
+  });
+  const order = new Map(ranked.map((r, i) => [r.id, i]));
+  return series
+    .map(toCard)
+    .sort((a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
 }
 
 export async function getSeriesByTrope(slug: string): Promise<{
@@ -171,4 +215,52 @@ export async function getAllTropesWithCounts(): Promise<
 export async function getAllSeriesIds(): Promise<string[]> {
   const rows = await prisma.series.findMany({ select: { id: true } });
   return rows.map((r) => r.id);
+}
+
+/**
+ * "More like this": series sharing tropes, ranked by overlap then score.
+ * Candidates are capped before scoring to keep the page cheap.
+ */
+export async function getSimilarSeries(
+  seriesId: string,
+  tropeSlugs: string[],
+  limit = 6
+): Promise<SeriesCardData[]> {
+  if (tropeSlugs.length === 0) return [];
+  const candidates = await prisma.series.findMany({
+    where: {
+      id: { not: seriesId },
+      tropeTags: { some: { trope: { slug: { in: tropeSlugs } } } },
+    },
+    include: cardInclude,
+    take: 24,
+  });
+  const wanted = new Set(tropeSlugs);
+  return candidates
+    .map((s) => {
+      const card = toCard(s);
+      const overlap = card.tropes.filter((t) => wanted.has(t.slug)).length;
+      return { card, overlap };
+    })
+    .sort(
+      (a, b) =>
+        b.overlap - a.overlap ||
+        (b.card.score.score ?? -1) - (a.card.score.score ?? -1)
+    )
+    .slice(0, limit)
+    .map((x) => x.card);
+}
+
+/** Lightweight counts for the home hero's social-proof strip. */
+export async function getSiteStats(): Promise<{
+  series: number;
+  reviews: number;
+  logs: number;
+}> {
+  const [series, reviews, logs] = await Promise.all([
+    prisma.series.count(),
+    prisma.review.count(),
+    prisma.log.count(),
+  ]);
+  return { series, reviews, logs };
 }
